@@ -1,0 +1,47 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --verde-primary:   #1D6A3A;
+  --verde-acento:    #5CB85C;
+  --rojo-rechazo:    #D9534F;
+  --amarillo:        #F0AD4E;
+  --fondo-pagina:    #F8F9FA;
+  --fondo-cards:     #FFFFFF;
+  --texto-primary:   #1A1A2E;
+  --texto-secondary: #6C757D;
+  --borde-cards:     #E9ECEF;
+}
+
+html, body, #app {
+  height: 100%;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--fondo-pagina);
+  color: var(--texto-primary);
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+input, select {
+  font-family: inherit;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(1.4); }
+}
+
+@keyframes ping {
+  0%    { transform: scale(1); opacity: 0.8; }
+  100%  { transform: scale(2.2); opacity: 0; }
+}
+
+.ping-ring {
+  animation: ping 1.4s ease-out infinite;
+}
