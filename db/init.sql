@@ -26,11 +26,19 @@ CREATE TABLE IF NOT EXISTS lote (
 -- Cada palta individual dentro de un lote
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS palta (
-    id            SERIAL PRIMARY KEY,
-    lote_id       INTEGER     NOT NULL REFERENCES lote(id) ON DELETE CASCADE,
-    clasificacion VARCHAR(20) CHECK (clasificacion IN ('sana', 'antracnosis')),
-    confianza     FLOAT       CHECK (confianza >= 0 AND confianza <= 1),
-    timestamp     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                 SERIAL PRIMARY KEY,
+    lote_id            INTEGER     NOT NULL REFERENCES lote(id) ON DELETE CASCADE,
+    -- clasificacion: 'sana' | 'antracnosis' | 'no_es_palta'. NULL mientras
+    -- todavia no se integran los modelos TFLite (fase actual: solo captura).
+    clasificacion      VARCHAR(20) CHECK (clasificacion IN ('sana', 'antracnosis', 'no_es_palta')),
+    confianza          FLOAT       CHECK (confianza >= 0 AND confianza <= 1),
+    votos_sana         SMALLINT    NOT NULL DEFAULT 0,
+    votos_antracnosis  SMALLINT    NOT NULL DEFAULT 0,
+    -- Ruta en disco de la foto representativa del ciclo (la imagen NO se
+    -- guarda dentro de la BD: el JPEG ya viene comprimido y meterlo en la
+    -- hypertable la infla. Aqui solo va la referencia).
+    foto_ruta          TEXT,
+    timestamp          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- -------------------------------------------------------------
@@ -52,6 +60,30 @@ CREATE TABLE IF NOT EXISTS sensor_data (
 
 -- Convertir sensor_data en hypertable particionada por tiempo
 SELECT create_hypertable('sensor_data', 'timestamp', if_not_exists => TRUE);
+
+-- -------------------------------------------------------------
+-- COMPRESIÓN NATIVA (columnstore) de la hypertable sensor_data
+-- -------------------------------------------------------------
+-- TimescaleDB comprime los chunks por columnas, agrupando (segmentby) por
+-- palta_id para que todas las lecturas de una misma palta queden juntas y
+-- ordenadas por tiempo. Reduce el almacenamiento hasta ~90-98% sobre datos
+-- numéricos de series temporales como estos (r,g,b,lux,temp,humedad).
+--
+-- Nota de versión: en TimescaleDB reciente esto también se puede escribir
+-- como `timescaledb.enable_columnstore = true` + add_columnstore_policy().
+-- La sintaxis `timescaledb.compress` + add_compression_policy() de abajo
+-- sigue siendo válida y es la más compatible entre versiones.
+ALTER TABLE sensor_data SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'palta_id',
+    timescaledb.compress_orderby   = 'timestamp DESC'
+);
+
+-- Política automática: comprime cualquier chunk con datos más viejos que el
+-- intervalo indicado. 7 días es un valor sano para producción; para una demo
+-- puedes bajarlo (p.ej. INTERVAL '1 hour') o comprimir un chunk a mano con:
+--   SELECT compress_chunk(c) FROM show_chunks('sensor_data') c;
+SELECT add_compression_policy('sensor_data', INTERVAL '7 days', if_not_exists => TRUE);
 
 -- -------------------------------------------------------------
 -- Índices
@@ -96,7 +128,10 @@ GROUP BY l.id, l.codigo, l.inicio, l.fin;
 
 -- -------------------------------------------------------------
 -- Datos iniciales de prueba
+-- IMPORTANTE: el lote semilla queda CERRADO (fin = NOW()) para que el sistema
+-- arranque INACTIVO. Así el ESP32 (que pollea /api/lote/activo) no arranca solo
+-- al encender: espera a que el frontend abra un lote nuevo.
 -- -------------------------------------------------------------
-INSERT INTO lote (codigo, observacion)
-VALUES ('LOTE-TEST-001', 'Lote de prueba inicial')
+INSERT INTO lote (codigo, observacion, fin)
+VALUES ('LOTE-TEST-001', 'Lote de prueba inicial (cerrado)', NOW())
 ON CONFLICT (codigo) DO NOTHING;

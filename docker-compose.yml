@@ -24,6 +24,10 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://paltacheck:paltacheck123@timescaledb:5432/paltacheck_db}
+      CAPTURAS_DIR: /app/capturas
+    volumes:
+      # Las fotos JPG persisten fuera del contenedor
+      - ./backend/capturas:/app/capturas
     depends_on:
       timescaledb:
         condition: service_healthy

@@ -5,3 +5,10 @@ __pycache__/
 *.pyo
 dist/
 .vite/
+plantilla-frontend/
+
+# Fotos JPG capturadas por el ESP32 (se guardan en disco, no en git)
+backend/capturas/
+capturas/
+*.jpg
+fotos_test/

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy import Column, Integer, SmallInteger, String, Float, DateTime, ForeignKey, Boolean, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -22,8 +22,11 @@ class Palta(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     lote_id = Column(Integer, ForeignKey("lote.id", ondelete="CASCADE"), nullable=False)
-    clasificacion = Column(String, nullable=True)   # 'sana' | 'antracnosis'
+    clasificacion = Column(String, nullable=True)   # 'sana' | 'antracnosis' | 'no_es_palta'
     confianza = Column(Float, nullable=True)
+    votos_sana = Column(SmallInteger, default=0)
+    votos_antracnosis = Column(SmallInteger, default=0)
+    foto_ruta = Column(Text, nullable=True)          # ruta en disco de la foto del ciclo
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
     lote = relationship("Lote", back_populates="paltas")
