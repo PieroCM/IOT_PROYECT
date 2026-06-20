@@ -1,38 +1,36 @@
 /* ============================================================================
-   PaltaCheck — PRUEBA: RODILLOS + CÁMARA + DASHBOARD   (ESP32-S3-CAM N16R8)
+   PaltaCheck — FLUJO COMPLETO: CINTA + RODILLOS + FOTO + SERVO + BOTE
+   (ESP32-S3 N16R8)  ·  script independiente (no toca los anteriores)
    ----------------------------------------------------------------------------
-   Usa TU lógica de rotación con pulsos. La CINTA queda FUERA de esta prueba
-   (tus pines de cinta 46/48/35 incluyen el 35 = PSRAM, que rompe la cámara).
-   Solo: rodillos + cámara + envío al backend para verlo en LoteActivo.vue.
+   Por cada lote abierto desde el dashboard:
+     1) WiFi + cámara
+     2) CINTA adelante 5 s -> para
+     3) Espera 2 s
+     4) RODILLOS x3: giro lento -> para -> FOTO -> manda al dashboard
+     5) DECISIÓN (compuerta servo, GPIO 3):
+          · palta BUENA  -> NO mueve el servo (compuerta cerrada)
+          · palta MALA   -> servo abre la compuerta para que CAIGA la palta
+     6) BOTE final (rodillos expulsan) y vuelve la compuerta a 0.
 
-   Flujo (por cada lote abierto desde el dashboard):
-     1) WiFi (while hasta conectar) + cámara.
-     2) Pollea GET /api/lote/activo hasta que haya lote ABIERTO.
-     3) Por cada vuelta (x3):
-          - gira la palta en los rodillos con pulsos (3 s)
-          - para los rodillos, deja asentar y TOMA foto
-          - POST /api/palta  ->  palta_id     +     POST /api/captura/foto
-            => aparece en el dashboard
-     4) "Bota" la palta (rodillos en sentido contrario) y termina ese lote.
+   PRUEBA DE 2 FLUJOS (se alternan solos):
+     · 1er lote procesado  -> BUENA  (sin servo)
+     · 2do lote procesado  -> MALA   (con servo)
+     · (sigue alternando: 3ro buena, 4to mala, ...)
 
-   ⚠️ ALIMENTACIÓN 13 V — LEER:
-     - El L298N a 13 V: QUITA el jumper del regulador 5V de la placa y alimenta
-       su lógica con 5V aparte. El regulador interno se sobrecalienta sobre ~12V.
-     - Los motores TT amarillos son de 3–6 V. A 13 V solo se salvan porque usas
-       DUTY BAJO (giro=45/255, botar=120/255). No subas a 255 ni los dejes fijos
-       a full o se queman. Pulsos cortos = bien.
-     - GND COMÚN obligatorio: GND ESP32 = GND de los dos L298N = (–) de la fuente.
-     - NO conectes los 13 V al ESP32 (va por USB). La fuente es de red: cuidado.
+   Requisito: instalar la librería **ESP32Servo** en el Arduino IDE.
+   ⚠️ El servo se alimenta con 5 V APARTE (no del 3V3 del ESP32) y GND común.
+   ⚠️ 13 V: jumper 5V del L298N fuera + 5V lógica aparte; GND común; nunca 13V al ESP32.
    ============================================================================ */
 
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "esp_camera.h"
+#include <ESP32Servo.h>
 
 // ─── CONFIG WiFi + Backend ──────────────────────────────────────────────────
-const char* SSID         = "TU_RED_WIFI";
-const char* PASSWORD     = "TU_CONTRASENA";
-const char* BACKEND_HOST = "10.207.55.254";   // IP de tu laptop en la red "Piero" (ipconfig -> IPv4 del Wi-Fi)
+const char* SSID         = "Piero";
+const char* PASSWORD     = "12345678";
+const char* BACKEND_HOST = "10.207.55.254";   // IP de tu laptop (ipconfig -> IPv4 del Wi-Fi)
 const int   BACKEND_PORT = 8000;
 
 // ─── PINES CÁMARA (modelo EYE, fijos — NO tocar) ────────────────────────────
@@ -53,48 +51,76 @@ const int   BACKEND_PORT = 8000;
 #define CAM_PIN_HREF   7
 #define CAM_PIN_PCLK  13
 
-// ─── PINES RODILLOS (L298N #2, jumpers ENA/ENB quitados) ────────────────────
+// ─── PINES CINTA (L298N #1) ─────────────────────────────────────────────────
+const int ENA_CINTA = 46;     // PWM velocidad
+const int IN1_CINTA = 48;     // dirección (HIGH = adelante). IN2 -> GND directo.
+
+// ─── PINES RODILLOS (L298N #2) ──────────────────────────────────────────────
 const int ENA_RODILLO1 = 42;
 const int IN1_RODILLO1 = 41;
 const int IN2_RODILLO1 = 40;
 const int ENB_RODILLO2 = 39;
 const int IN3_RODILLO2 = 38;
-const int IN4_RODILLO2 = 47;   // (8 era de la cámara; usamos 47)
+const int IN4_RODILLO2 = 47;
 
-// ─── PWM ────────────────────────────────────────────────────────────────────
+// ─── SERVO compuerta (lógica de tu compañero) ──────────────────────────────
+const int PIN_SERVO          = 3;
+const int ANGULO_COMPUERTA   = 45;   // cuánto abre la compuerta
+const int velocidadMovimiento = 3;   // ms por grado (menor = más rápido)
+Servo servoCompuerta;
+int  posicionActual = 0;
+
+// ─── PWM motores ────────────────────────────────────────────────────────────
 const int freqPWM       = 1000;
 const int resolucionPWM = 8;     // 0..255
 
-// ─── Velocidades / tiempos (de tu código) ───────────────────────────────────
-const int potenciaBotar = 120;          // duty para expulsar la palta
-const int dutyArranque  = 160;          // "patada" breve que vence la fricción al iniciar
-const int dutyLento     = 70;           // velocidad LENTA sostenida del giro (sube/baja a gusto)
-const int tiempoArranqueMs = 150;       // ms de la patada de arranque
+// ─── Velocidades / tiempos ──────────────────────────────────────────────────
+// Cinta
+const int velocidadCinta            = 100;
+const int dutyArranqueCinta         = 180;
+const int tiempoArranqueCintaMs     = 150;
+const unsigned long tiempoCinta     = 5000;   // 5 s de cinta
+const unsigned long tiempoEspera    = 2000;   // 2 s de espera
+// Rodillos
+const int potenciaBotar             = 120;
+const int dutyArranque              = 160;
+const int dutyLento                 = 70;
+const int tiempoArranqueMs          = 150;
 const unsigned long tiempoGiroRodillos = 3000;
-const unsigned long tiempoBotar        = 4000;
-const int cantidadVueltas              = 3;
-const unsigned long tiempoAsientaFoto  = 600;   // que la palta quede quieta para la foto
+const unsigned long tiempoBotar         = 4000;
+const int cantidadVueltas               = 3;
+const unsigned long tiempoAsientaFoto   = 600;
 
 // ─── WiFi/Backend ───────────────────────────────────────────────────────────
 const unsigned long POLL_LOTE_MS = 5000;
-
 bool loteActivo  = false;
 int  loteId      = -1;
-bool yaProcesado = false;        // un ciclo por lote
+bool yaProcesado = false;
+int  contadorPaltas = 0;        // para alternar BUENA / MALA
 
 // ════════════════════════════════════════════════════════════════════════════
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\n===== PRUEBA Rodillos + Camara + Dashboard =====");
+  Serial.println("\n===== FLUJO COMPLETO: Cinta + Rodillos + Foto + Servo + Bote =====");
 
+  // Cinta
+  pinMode(IN1_CINTA, OUTPUT);
+  ledcAttach(ENA_CINTA, freqPWM, resolucionPWM);
+  // Rodillos
   pinMode(IN1_RODILLO1, OUTPUT);
   pinMode(IN2_RODILLO1, OUTPUT);
   pinMode(IN3_RODILLO2, OUTPUT);
   pinMode(IN4_RODILLO2, OUTPUT);
   ledcAttach(ENA_RODILLO1, freqPWM, resolucionPWM);
   ledcAttach(ENB_RODILLO2, freqPWM, resolucionPWM);
-  detenerRodillos();
+  detenerTodo();
+
+  // Servo (compuerta cerrada en 0)
+  servoCompuerta.setPeriodHertz(50);
+  servoCompuerta.attach(PIN_SERVO, 500, 2400);
+  servoCompuerta.write(0);
+  posicionActual = 0;
 
   iniciarCamara();
   conectarWiFi();
@@ -108,9 +134,9 @@ void loop() {
 
   if (loteActivo && !yaProcesado) {
     procesarLote();
-    yaProcesado = true;          // ya hicimos el ciclo de este lote
+    yaProcesado = true;
   }
-  if (!loteActivo) yaProcesado = false;   // se cerró: rearmar para el próximo
+  if (!loteActivo) yaProcesado = false;
 
   delay(POLL_LOTE_MS);
 }
@@ -119,12 +145,36 @@ void loop() {
 //  CICLO POR LOTE
 // ════════════════════════════════════════════════════════════════════════════
 void procesarLote() {
-  Serial.printf("\n>>> LOTE %d ACTIVO\n", loteId);
+  Serial.printf("\n>>> LOTE %d ACTIVO — probando los 2 flujos seguidos\n", loteId);
 
+  procesarPalta(true);    // 1ra palta: BUENA (sin servo)
+
+  Serial.println("\n--- Siguiente palta en 3 s ---");
+  delay(3000);
+
+  procesarPalta(false);   // 2da palta: MALA (con servo)
+
+  Serial.println("\n[OK] LOTE COMPLETO (buena + mala) — revisa el dashboard\n");
+}
+
+// Procesa UNA palta completa: cinta -> rodillos+fotos -> servo -> bote.
+void procesarPalta(bool esBuena) {
+  Serial.printf("\n=== Palta %s ===\n", esBuena ? "BUENA" : "MALA");
+
+  // 1) Cinta 5 s
+  Serial.println("[1] Cinta adelante 5 s");
+  cintaAdelante(velocidadCinta);
+  delay(tiempoCinta);
+  detenerCinta();
+
+  // 2) Espera 2 s
+  Serial.println("[2] Espera 2 s");
+  delay(tiempoEspera);
+
+  // 3) Rodillos: 3 vueltas con foto
   for (int i = 1; i <= cantidadVueltas; i++) {
     Serial.printf("\n[Vuelta %d/%d] girando palta en rodillos\n", i, cantidadVueltas);
     girarPaltaEnRodillos(tiempoGiroRodillos);
-
     Serial.println("  stop + asentar + foto");
     detenerRodillos();
     delay(tiempoAsientaFoto);
@@ -132,22 +182,64 @@ void procesarLote() {
     camera_fb_t* fb = esp_camera_fb_get();
     if (fb) {
       Serial.printf("  [CAM] %u bytes\n", fb->len);
-      int paltaId = enviarPalta();          // POST /api/palta
-      enviarFoto(fb, paltaId);              // POST /api/captura/foto
+      int paltaId = enviarPalta(esBuena);     // POST /api/palta
+      enviarFoto(fb, paltaId);                // POST /api/captura/foto
       esp_camera_fb_return(fb);
     } else {
       Serial.println("  [CAM] ERROR: sin frame");
     }
   }
 
-  Serial.println("\n[Botar] expulsando palta");
+  // 4) DECISIÓN: compuerta
+  if (esBuena) {
+    Serial.println("\n[SERVO] palta BUENA -> compuerta CERRADA (no mueve)");
+  } else {
+    Serial.println("\n[SERVO] palta MALA -> ABRE compuerta para que caiga");
+    moverCompuerta(ANGULO_COMPUERTA);
+    delay(800);                               // deja caer la palta
+  }
+
+  // 5) Bote final (rodillos expulsan)
+  Serial.println("[Botar] expulsando palta");
   botarPalta(tiempoBotar);
-  detenerRodillos();
-  Serial.println("[OK] lote procesado — revisa el dashboard LoteActivo.vue\n");
+  detenerTodo();
+
+  // 6) Vuelve la compuerta a 0 para la siguiente
+  if (!esBuena) {
+    moverCompuerta(0);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  RODILLOS (tu lógica con pulsos)
+//  SERVO (movimiento suave, lógica de tu compañero)
+// ════════════════════════════════════════════════════════════════════════════
+void moverCompuerta(int nuevaPos) {
+  nuevaPos = constrain(nuevaPos, 0, 180);
+  Serial.printf("  [SERVO] %d -> %d grados\n", posicionActual, nuevaPos);
+  if (nuevaPos > posicionActual) {
+    for (int p = posicionActual; p <= nuevaPos; p++) { servoCompuerta.write(p); delay(velocidadMovimiento); }
+  } else {
+    for (int p = posicionActual; p >= nuevaPos; p--) { servoCompuerta.write(p); delay(velocidadMovimiento); }
+  }
+  posicionActual = nuevaPos;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  CINTA
+// ════════════════════════════════════════════════════════════════════════════
+void cintaAdelante(int vel) {
+  digitalWrite(IN1_CINTA, HIGH);
+  ledcWrite(ENA_CINTA, dutyArranqueCinta);
+  delay(tiempoArranqueCintaMs);
+  ledcWrite(ENA_CINTA, vel);
+}
+void detenerCinta() {
+  ledcWrite(ENA_CINTA, 0);
+  digitalWrite(IN1_CINTA, LOW);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  RODILLOS
 // ════════════════════════════════════════════════════════════════════════════
 void rodillosParaGirarPalta(int v1, int v2) {
   digitalWrite(IN1_RODILLO1, LOW);  digitalWrite(IN2_RODILLO1, HIGH);
@@ -162,11 +254,8 @@ void rodillosParaBotarPalta(int v1, int v2) {
   ledcWrite(ENB_RODILLO2, v2);
 }
 void girarPaltaEnRodillos(unsigned long tiempoTotal) {
-  // 1) PATADA de arranque: duty alto y CORTO para vencer la fricción estática.
-  //    (Antes con duty 45 y pulsos de 50 ms NO arrancaban; solo zumbaban.)
   rodillosParaGirarPalta(dutyArranque, dutyArranque);
   delay(tiempoArranqueMs);
-  // 2) Giro LENTO y CONTINUO el resto del tiempo.
   rodillosParaGirarPalta(dutyLento, dutyLento);
   if (tiempoTotal > (unsigned long)tiempoArranqueMs)
     delay(tiempoTotal - tiempoArranqueMs);
@@ -184,6 +273,10 @@ void detenerRodillos() {
   digitalWrite(IN2_RODILLO1, LOW);
   digitalWrite(IN3_RODILLO2, LOW);
   digitalWrite(IN4_RODILLO2, LOW);
+}
+void detenerTodo() {
+  detenerCinta();
+  detenerRodillos();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -208,18 +301,20 @@ void consultarLoteActivo() {
   http.end();
 }
 
-int enviarPalta() {
+// POST /api/palta. Mandamos la clasificación de prueba: BUENA="sana", MALA="antracnosis".
+int enviarPalta(bool esBuena) {
   if (WiFi.status() != WL_CONNECTED) return -1;
   HTTPClient http;
   String url = String("http://") + BACKEND_HOST + ":" + BACKEND_PORT + "/api/palta";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  char body[200];
+  const char* clase = esBuena ? "\"sana\"" : "\"antracnosis\"";
+  char body[220];
   snprintf(body, sizeof(body),
-    "{\"lote_id\":%d,\"clasificacion\":null,\"confianza\":null,"
+    "{\"lote_id\":%d,\"clasificacion\":%s,\"confianza\":1.0,"
     "\"r\":null,\"g\":null,\"b\":null,\"lux\":null,"
     "\"temp\":null,\"humedad\":null,\"ir_detectado\":true,\"lecturas\":1}",
-    loteId);
+    loteId, clase);
   int paltaId = -1;
   int code = http.POST((uint8_t*)body, strlen(body));
   if (code == 200) {
@@ -254,7 +349,7 @@ void conectarWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(SSID, PASSWORD);
   Serial.printf("[WiFi] conectando a \"%s\"", SSID);
-  while (WiFi.status() != WL_CONNECTED) {   // while pedido
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500); Serial.print(".");
   }
   Serial.print("\n[WiFi] CONECTADO  IP: "); Serial.println(WiFi.localIP());
