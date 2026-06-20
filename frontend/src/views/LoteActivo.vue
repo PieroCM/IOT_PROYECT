@@ -67,21 +67,7 @@
             <p class="kpi-sub">de este lote</p>
           </div>
 
-          <!-- Card 2: Rechazo -->
-          <div class="card kpi-card">
-            <p class="kpi-label">Tasa de Rechazo</p>
-            <div class="kpi-value-row">
-              <span class="kpi-number" style="color: var(--rojo-rechazo)">{{ kpis.tasa_rechazo }}%</span>
-              <span
-                class="badge-pill"
-                :class="kpis.tasa_rechazo > 15 ? 'badge-pill--rojo' : 'badge-pill--verde'"
-              >
-                {{ kpis.tasa_rechazo > 15 ? 'ALTO' : 'NORMAL' }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Card 3: Velocidad -->
+          <!-- Card 2: Velocidad -->
           <div class="card kpi-card">
             <p class="kpi-label">Velocidad de Línea</p>
             <div class="kpi-value-row">
@@ -97,70 +83,70 @@
               />
             </div>
           </div>
-
-          <!-- Card 4: Confianza -->
-          <div class="card kpi-card">
-            <p class="kpi-label">Confianza del Modelo</p>
-            <div class="kpi-value-row">
-              <span class="kpi-number">{{ kpis.confianza_promedio !== null ? (kpis.confianza_promedio * 100).toFixed(1) : '—' }}%</span>
-              <svg width="56" height="56" viewBox="0 0 64 64" class="donut">
-                <circle cx="32" cy="32" r="26" fill="none" stroke="var(--borde-cards)" stroke-width="7"/>
-                <circle
-                  cx="32" cy="32" r="26" fill="none"
-                  stroke="var(--verde-acento)" stroke-width="7"
-                  stroke-dasharray="163.36" stroke-dashoffset="0"
-                  :style="{ strokeDashoffset: 163.36 - (confianzaPct / 100) * 163.36 }"
-                  stroke-linecap="round"
-                  transform="rotate(-90 32 32)"
-                />
-              </svg>
-            </div>
-          </div>
         </div>
 
         <!-- Two-column layout -->
         <div class="two-col">
           <!-- LEFT -->
           <div class="col-left">
-            <!-- Chart -->
-            <div class="card chart-card">
-              <h3 class="card-title">Evolución de rechazos</h3>
-              <div class="chart-wrap">
-                <Line v-if="chartData.labels.length > 1" :data="chartData" :options="chartOptions" />
-                <div v-else class="chart-empty">Sin datos suficientes aún…</div>
+            <!-- Captura de cámara -->
+            <div class="card camara-card">
+              <div class="camara-head">
+                <h3 class="card-title">Captura de cámara</h3>
+                <span v-if="ultimaCaptura" class="badge-pill badge-pill--sm"
+                  :class="ultimaCaptura.clasificacion === 'sana' ? 'badge-pill--verde' : 'badge-pill--rojo'">
+                  {{ ultimaCaptura.clasificacion === 'sana' ? 'Sana' : 'Antracnosis' }}
+                </span>
               </div>
-              <div class="chart-legend">
-                <span class="legend-item legend-item--rojo">% Rechazo acumulado</span>
-                <span class="legend-item legend-item--verde">Confianza promedio</span>
+              <div class="camara-wrap">
+                <template v-if="ultimaCaptura">
+                  <img
+                    :src="ultimaCaptura.url"
+                    :alt="'Palta #' + ultimaCaptura.id"
+                    class="camara-img"
+                  />
+                  <div class="camara-meta">
+                    Palta #{{ ultimaCaptura.id }} · {{ formatHora(ultimaCaptura.timestamp) }}
+                  </div>
+                </template>
+                <div v-else class="camara-empty">
+                  <span class="camara-empty-icon">📷</span>
+                  <p>Esperando captura de la cámara…</p>
+                </div>
               </div>
             </div>
 
-            <!-- Sensor mini cards -->
-            <div class="sensor-row">
-              <div class="card sensor-card">
-                <div class="sensor-card__inner">
+            <!-- Sensores de la última palta -->
+            <div class="card sensores-card">
+              <h3 class="card-title">Sensores · Palta #{{ store.ultimaPalta?.id ?? '—' }}</h3>
+              <div class="sensores-grid">
+                <div class="sensor-tile">
                   <span class="sensor-icon">🌡️</span>
                   <span class="sensor-label">Temperatura</span>
+                  <span class="sensor-value">{{ sensorActual?.temp != null ? sensorActual.temp.toFixed(1) + '°C' : '—' }}</span>
                 </div>
-                <span class="sensor-value">
-                  {{ kpis.temp_promedio !== null ? kpis.temp_promedio + '°C' : '—' }}
-                </span>
-              </div>
-              <div class="card sensor-card">
-                <div class="sensor-card__inner">
+                <div class="sensor-tile">
                   <span class="sensor-icon">💧</span>
                   <span class="sensor-label">Humedad</span>
+                  <span class="sensor-value">{{ sensorActual?.humedad != null ? sensorActual.humedad.toFixed(0) + '%' : '—' }}</span>
                 </div>
-                <span class="sensor-value">
-                  {{ kpis.humedad_promedio !== null ? kpis.humedad_promedio + '%' : '—' }}
-                </span>
-              </div>
-              <div class="card sensor-card">
-                <div class="sensor-card__inner">
+                <div class="sensor-tile">
+                  <span class="sensor-icon">💡</span>
+                  <span class="sensor-label">Lux</span>
+                  <span class="sensor-value">{{ sensorActual?.lux != null ? sensorActual.lux.toFixed(0) : '—' }}</span>
+                </div>
+                <div class="sensor-tile">
+                  <span class="sensor-swatch" :style="{ background: rgbColor }" />
+                  <span class="sensor-label">RGB</span>
+                  <span class="sensor-value sensor-value--sm">
+                    {{ sensorActual ? `${sensorActual.r ?? '—'}, ${sensorActual.g ?? '—'}, ${sensorActual.b ?? '—'}` : '—' }}
+                  </span>
+                </div>
+                <div class="sensor-tile">
                   <span class="sensor-icon">⚠️</span>
                   <span class="sensor-label">Riesgo ambiental</span>
+                  <span class="badge-pill" :class="riesgoBadge.clase">{{ riesgoBadge.label }}</span>
                 </div>
-                <span class="badge-pill" :class="riesgoBadge.clase">{{ riesgoBadge.label }}</span>
               </div>
             </div>
           </div>
@@ -271,10 +257,11 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { Line } from 'vue-chartjs'
+import axios from 'axios'
 import { usePaltaStore } from '../stores/palta'
 
 const store = usePaltaStore()
+const apiBase = axios.defaults.baseURL || ''
 const nuevoCodigo = ref('')
 const elapsedSeconds = ref(0)
 let timerInterval = null
@@ -306,18 +293,8 @@ const elapsedTime = computed(() => {
 
 // ── KPIs con defaults seguros ────────────────────────────
 const kpis = computed(() => ({
-  total:              store.kpis?.total              ?? 0,
-  tasa_rechazo:       store.kpis?.tasa_rechazo       ?? 0,
-  confianza_promedio: store.kpis?.confianza_promedio ?? null,
-  temp_promedio:      store.kpis?.temp_promedio      ?? null,
-  humedad_promedio:   store.kpis?.humedad_promedio   ?? null,
+  total: store.kpis?.total ?? 0,
 }))
-
-const confianzaPct = computed(() => {
-  const v = kpis.value.confianza_promedio
-  if (v === null) return 0
-  return v <= 1 ? v * 100 : v
-})
 
 // ── Sparkline velocidad ──────────────────────────────────
 const speedHistory = computed(() => {
@@ -327,11 +304,32 @@ const speedHistory = computed(() => {
 })
 const maxSpeed = computed(() => Math.max(...speedHistory.value, 0.1))
 
-// ── Riesgo ambiental ─────────────────────────────────────
+// ── Cámara / sensores por palta ──────────────────────────
+const ultimaCaptura = computed(() => {
+  // Última palta del lote que ya tenga foto asociada
+  const conFoto = [...store.paltas].reverse().find(p => p.foto_url)
+  if (!conFoto) return null
+  return {
+    id: conFoto.id,
+    url: apiBase + conFoto.foto_url,
+    clasificacion: conFoto.clasificacion,
+    timestamp: conFoto.timestamp,
+  }
+})
+
+const sensorActual = computed(() => store.ultimaPalta?.sensor || null)
+
+const rgbColor = computed(() => {
+  const s = sensorActual.value
+  if (!s || s.r == null || s.g == null || s.b == null) return 'var(--borde-cards)'
+  return `rgb(${s.r}, ${s.g}, ${s.b})`
+})
+
+// ── Riesgo ambiental (lectura de la última palta) ────────
 const riesgoBadge = computed(() => {
-  const t = kpis.value.temp_promedio
-  const h = kpis.value.humedad_promedio
-  if (t === null || h === null) return { label: '—', clase: '' }
+  const s = sensorActual.value
+  if (!s || s.temp == null || s.humedad == null) return { label: '—', clase: '' }
+  const t = s.temp, h = s.humedad
   if (h < 70 && t < 26) return { label: 'BAJO',  clase: 'badge-pill--verde' }
   if (h < 80 && t < 28) return { label: 'MEDIO', clase: 'badge-pill--amarillo' }
   return { label: 'ALTO', clase: 'badge-pill--rojo' }
@@ -350,73 +348,6 @@ const ultimasOcho = computed(() => [...store.paltas].reverse().slice(0, 8))
 function formatHora(ts) {
   if (!ts) return '—'
   return new Date(ts).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit', second:'2-digit' })
-}
-
-// ── Chart.js ─────────────────────────────────────────────
-const chartData = computed(() => {
-  const paltas = store.paltas
-  return {
-    labels: paltas.map((_, i) => i + 1),
-    datasets: [
-      {
-        label: '% Rechazo acumulado',
-        data: paltas.map((_, i) => {
-          const slice = paltas.slice(0, i + 1)
-          const rej = slice.filter(p => p.clasificacion === 'antracnosis').length
-          return Number(((rej / slice.length) * 100).toFixed(1))
-        }),
-        borderColor: '#D9534F',
-        borderDash: [5, 5],
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.3,
-        fill: false,
-      },
-      {
-        label: 'Confianza promedio',
-        data: paltas.map((_, i) => {
-          const slice = paltas.slice(0, i + 1)
-          const avg = slice.reduce((s, p) => s + (p.confianza ?? 0), 0) / slice.length
-          return Number((avg * 100).toFixed(1))
-        }),
-        borderColor: '#5CB85C',
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.3,
-        fill: false,
-      },
-    ],
-  }
-})
-
-const chartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  interaction: { mode: 'index', intersect: false },
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: '#fff',
-      borderColor: '#E9ECEF',
-      borderWidth: 1,
-      titleColor: '#1A1A2E',
-      bodyColor: '#6C757D',
-    },
-  },
-  scales: {
-    x: {
-      title: { display: true, text: 'Número de palta', color: '#6C757D', font: { size: 11 } },
-      grid: { color: '#E9ECEF' },
-      ticks: { color: '#6C757D' },
-    },
-    y: {
-      min: 0,
-      max: 100,
-      title: { display: true, text: 'Porcentaje (%)', color: '#6C757D', font: { size: 11 } },
-      grid: { color: '#E9ECEF' },
-      ticks: { color: '#6C757D' },
-    },
-  },
 }
 
 // ── Acciones ─────────────────────────────────────────────
@@ -609,7 +540,7 @@ function exportarCSV() {
 /* ── KPI grid ── */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
 }
 
@@ -667,9 +598,6 @@ function exportarCSV() {
   transition: height 0.3s;
 }
 
-/* Donut gauge */
-.donut { transform: scaleX(-1); }
-
 /* ── Badges ── */
 .badge-pill {
   display: inline-block;
@@ -698,80 +626,97 @@ function exportarCSV() {
   gap: 20px;
 }
 
-/* Chart */
-.chart-card { padding-bottom: 16px; }
+/* Captura de cámara */
+.camara-card { padding-bottom: 16px; }
 
-.chart-wrap {
-  padding: 0 20px;
-  height: 260px;
+.camara-head {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  padding-right: 20px;
 }
 
-.chart-empty {
+.camara-wrap {
+  margin: 0 20px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--fondo-pagina);
+  border: 1px solid var(--borde-cards);
+}
+
+.camara-img {
+  display: block;
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+  background: #000;
+}
+
+.camara-meta {
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  color: var(--texto-secondary);
+  padding: 8px 12px;
+  border-top: 1px solid var(--borde-cards);
+}
+
+.camara-empty {
+  height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   color: var(--texto-secondary);
   font-size: 0.85rem;
 }
 
-.chart-legend {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-  padding: 8px 20px 0;
+.camara-empty-icon { font-size: 2.4rem; opacity: 0.5; }
+
+/* Sensores por palta */
+.sensores-card { padding-bottom: 16px; }
+
+.sensores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 0 20px;
 }
 
-.legend-item {
-  font-size: 0.75rem;
+.sensor-tile {
+  background: var(--fondo-pagina);
+  border: 1px solid var(--borde-cards);
+  border-radius: 10px;
+  padding: 14px 12px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 6px;
+  text-align: center;
 }
 
-.legend-item::before {
-  content: '';
-  display: inline-block;
-  width: 20px;
-  height: 2px;
-  border-radius: 1px;
+.sensor-icon { font-size: 1.4rem; line-height: 1; }
+
+.sensor-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--borde-cards);
 }
-
-.legend-item--rojo::before  { background: var(--rojo-rechazo); border-top: 2px dashed var(--rojo-rechazo); }
-.legend-item--verde::before { background: var(--verde-acento); }
-
-/* Sensor row */
-.sensor-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.sensor-card {
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.sensor-card__inner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sensor-icon { font-size: 1.1rem; }
 
 .sensor-label {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--texto-secondary);
 }
 
 .sensor-value {
   font-family: 'Courier New', monospace;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 600;
   color: var(--texto-primary);
 }
+
+.sensor-value--sm { font-size: 0.82rem; }
 
 /* Última palta card */
 .ultima-card { padding: 0 20px 20px; }
@@ -945,8 +890,8 @@ function exportarCSV() {
 }
 
 @media (max-width: 640px) {
-  .kpi-grid    { grid-template-columns: 1fr; }
-  .sensor-row  { grid-template-columns: 1fr; }
+  .kpi-grid      { grid-template-columns: 1fr; }
+  .sensores-grid { grid-template-columns: repeat(2, 1fr); }
   .dash-header { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 8px; }
   .dash-body   { padding: 12px 16px; }
   .bottom-bar  { padding: 0 16px; }

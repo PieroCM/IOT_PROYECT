@@ -135,6 +135,12 @@ def lote_activo(db: Any = Depends(get_db)):
 def crear_lote(body: LoteCreate, db: Any = Depends(get_db)):
     if db is not None:
         from models import Lote
+        # Cierra cualquier lote que haya quedado ABIERTO (remanente) antes de
+        # crear el nuevo: así nunca hay dos lotes activos a la vez y el ESP32
+        # (que pollea /api/lote/activo) siempre apunta a uno solo.
+        abiertos = db.query(Lote).filter(Lote.fin.is_(None)).all()
+        for prev in abiertos:
+            prev.fin = datetime.now(timezone.utc)
         lote = Lote(codigo=body.codigo)
         db.add(lote)
         db.commit()

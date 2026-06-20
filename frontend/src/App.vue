@@ -62,7 +62,6 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
 import { usePaltaStore } from './stores/palta'
 
 const store = usePaltaStore()
@@ -70,29 +69,19 @@ const sidebarOpen = ref(false)
 
 let healthInterval = null
 
-// Cierre automático del lote al refrescar o cerrar la pestaña: si quedara
-// abierto, el ESP32 lo seguiría poleando como activo y procesaría paltas
-// fantasma. sendBeacon es lo único que se garantiza durante 'unload'.
-function cerrarLoteEnUnload () {
-  const id = store.loteActivo?.id
-  if (!id) return
-  const baseURL = axios.defaults.baseURL || ''
-  navigator.sendBeacon(`${baseURL}/api/lote/${id}/cerrar`)
-}
-
-onMounted(() => {
+onMounted(async () => {
   store.fetchHealth()
+  // Restaura el lote que siga abierto en el backend: así un F5/refresh NO pierde
+  // el lote, se mantiene. (El lote solo se cierra al pulsar "Cerrar Lote" o al
+  // abrir otro nuevo, que cierra los remanentes en el backend.)
+  await store.fetchLoteActivo()
   store.iniciarPolling()
   healthInterval = setInterval(() => store.fetchHealth(), 15000)
-  window.addEventListener('beforeunload', cerrarLoteEnUnload)
-  window.addEventListener('pagehide',     cerrarLoteEnUnload)
 })
 
 onUnmounted(() => {
   store.detenerPolling()
   clearInterval(healthInterval)
-  window.removeEventListener('beforeunload', cerrarLoteEnUnload)
-  window.removeEventListener('pagehide',     cerrarLoteEnUnload)
 })
 </script>
 

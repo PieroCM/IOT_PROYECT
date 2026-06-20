@@ -33,14 +33,30 @@ export const usePaltaStore = defineStore('palta', {
       }
     },
 
+    // Restaura el lote activo desde el backend (al cargar/refrescar la página),
+    // así un F5 NO pierde el lote: se reconecta al que sigue abierto.
+    async fetchLoteActivo() {
+      try {
+        const { data } = await axios.get('/api/lote/activo')
+        if (data?.activo) {
+          this.loteActivo = { id: data.id, codigo: data.codigo, inicio: data.inicio }
+        } else {
+          this.loteActivo = null
+        }
+      } catch { /* silencioso: si falla, deja el estado como está */ }
+    },
+
     async abrirLote(codigo) {
       this.loading = true
       this.error = null
       try {
+        // El backend cierra automáticamente cualquier lote remanente abierto
+        // antes de crear este nuevo (ver crear_lote en main.py).
         const { data } = await axios.post('/api/lote', { codigo })
         this.loteActivo = { ...data, inicio: data.inicio || new Date().toISOString() }
         this.paltas = []
         this.kpis = null
+        this.iniciarPolling()   // asegura el polling activo (idempotente)
         return data
       } catch (e) {
         this.error = e.response?.data?.detail || e.message
@@ -57,7 +73,8 @@ export const usePaltaStore = defineStore('palta', {
         this.loteActivo = null
         this.paltas = []
         this.kpis = null
-        this.detenerPolling()
+        // El polling sigue vivo (no hace nada sin loteActivo) para que al abrir
+        // otro lote se reanude solo. Se detiene al desmontar la app.
       } catch (e) {
         this.error = e.response?.data?.detail || e.message
       } finally {
