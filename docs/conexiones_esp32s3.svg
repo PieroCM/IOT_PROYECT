@@ -1,0 +1,61 @@
+<svg viewBox="0 0 800 620" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, Arial, sans-serif">
+<title>Mapa de conexiones del ESP32-S3 PaltaCheck</title>
+<rect x="0" y="0" width="800" height="620" fill="#ffffff"/>
+<text x="30" y="28" font-size="17" font-weight="700" fill="#1a1a1a">PaltaCheck — Conexiones ESP32-S3</text>
+
+<line x1="540" y1="20" x2="566" y2="20" stroke="#2563eb" stroke-width="3"/>
+<text x="572" y="24" font-size="11" fill="#555">conectado y OK</text>
+<line x1="540" y1="38" x2="566" y2="38" stroke="#888" stroke-width="3" stroke-dasharray="5 4"/>
+<text x="572" y="42" font-size="11" fill="#555">por agregar</text>
+
+<rect x="30" y="150" width="180" height="300" rx="14" fill="#ffffff" stroke="#2563eb" stroke-width="2.5"/>
+<text x="120" y="290" text-anchor="middle" font-size="20" font-weight="700" fill="#1a1a1a">ESP32-S3</text>
+<text x="120" y="312" text-anchor="middle" font-size="12" fill="#555">N16R8 + cámara</text>
+<text x="120" y="430" text-anchor="middle" font-size="11" fill="#555">alim: USB 5 V</text>
+
+<line x1="250" y1="86" x2="250" y2="466" stroke="#2563eb" stroke-width="2"/>
+<line x1="210" y1="300" x2="250" y2="300" stroke="#2563eb" stroke-width="2"/>
+
+<line x1="250" y1="86"  x2="320" y2="86"  stroke="#2563eb" stroke-width="2"/>
+<line x1="250" y1="148" x2="320" y2="148" stroke="#2563eb" stroke-width="2"/>
+<line x1="250" y1="210" x2="320" y2="210" stroke="#2563eb" stroke-width="2"/>
+<line x1="250" y1="272" x2="320" y2="272" stroke="#2563eb" stroke-width="2"/>
+<line x1="250" y1="334" x2="320" y2="334" stroke="#2563eb" stroke-width="2"/>
+<line x1="250" y1="404" x2="320" y2="404" stroke="#888" stroke-width="2" stroke-dasharray="5 4"/>
+<line x1="250" y1="466" x2="320" y2="466" stroke="#888" stroke-width="2" stroke-dasharray="5 4"/>
+
+<rect x="320" y="60" width="450" height="52" rx="9" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+<text x="334" y="82" font-size="13" font-weight="700" fill="#1a1a1a">Cámara OV3660</text>
+<text x="334" y="100" font-size="11.5" fill="#555">Pines fijos GPIO 4–18 · no tocar</text>
+
+<rect x="320" y="122" width="450" height="52" rx="9" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+<text x="334" y="144" font-size="13" font-weight="700" fill="#1a1a1a">L298N #2 · Rodillos</text>
+<text x="334" y="162" font-size="11.5" fill="#555">R1: ENA 42 · IN1 41 · IN2 40   |   R2: ENB 39 · IN3 38 · IN4 47</text>
+
+<rect x="320" y="184" width="450" height="52" rx="9" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+<text x="334" y="206" font-size="13" font-weight="700" fill="#1a1a1a">Sensor RGB (TCS34725)</text>
+<text x="334" y="224" font-size="11.5" fill="#555">I²C · SDA 14 · SCL 21</text>
+
+<rect x="320" y="246" width="450" height="52" rx="9" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+<text x="334" y="268" font-size="13" font-weight="700" fill="#1a1a1a">Sensor Humedad</text>
+<text x="334" y="286" font-size="11.5" fill="#555">GPIO 2</text>
+
+<rect x="320" y="308" width="450" height="52" rx="9" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+<text x="334" y="330" font-size="13" font-weight="700" fill="#1a1a1a">Sensor IR (FC-51)</text>
+<text x="334" y="348" font-size="11.5" fill="#555">GPIO 1</text>
+
+<text x="320" y="378" font-size="12.5" font-weight="700" fill="#555">+ Por agregar (cinta y servo)</text>
+
+<rect x="320" y="396" width="450" height="52" rx="9" fill="#ffffff" stroke="#888" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="334" y="418" font-size="13" font-weight="700" fill="#1a1a1a">L298N #1 · Cinta</text>
+<text x="334" y="436" font-size="11.5" fill="#555">ENA 46 · IN1 48 · IN2 → GND (solo adelante)</text>
+
+<rect x="320" y="458" width="450" height="52" rx="9" fill="#ffffff" stroke="#888" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="334" y="480" font-size="13" font-weight="700" fill="#1a1a1a">Servo</text>
+<text x="334" y="498" font-size="11.5" fill="#555">GPIO 3</text>
+
+<rect x="30" y="528" width="740" height="74" rx="11" fill="#fafafa" stroke="#ccc" stroke-width="1.5"/>
+<text x="44" y="551" font-size="12.5" font-weight="700" fill="#1a1a1a">⚡ Alimentación 13 V</text>
+<text x="44" y="571" font-size="11.5" fill="#555">Fuente 13 V → bornes de motor del L298N  ·  GND común: ESP32 ↔ L298N ↔ (–) 13 V</text>
+<text x="44" y="589" font-size="11.5" fill="#555">Quita el jumper 5V del L298N y dale 5 V de lógica aparte  ·  ESP32 por USB (nunca 13 V)</text>
+</svg>

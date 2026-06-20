@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Write-Output \"===== lote activo \\(lo que verá el ESP32\\) =====\"; try { \\(Invoke-WebRequest \"http://localhost:8000/api/lote/activo\" -UseBasicParsing -TimeoutSec 5\\).Content } catch { $_.Exception.Message }; Write-Output \"`n===== lotes ABIERTOS \\(fin=null\\) =====\"; try { $j = \\(Invoke-WebRequest \"http://localhost:8000/api/lotes\" -UseBasicParsing -TimeoutSec 5\\).Content | ConvertFrom-Json; $j | Where-Object { $_.fin -eq $null } | Select-Object id, codigo, total | Format-Table -AutoSize } catch { $_.Exception.Message })"
+    ]
+  }
+}
