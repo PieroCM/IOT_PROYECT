@@ -1,0 +1,46 @@
+<svg viewBox="0 0 770 520" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, Arial, sans-serif">
+<rect x="0" y="0" width="770" height="520" fill="#ffffff"/>
+<text x="24" y="26" font-size="16" font-weight="700" fill="#1a1a1a">Mapa de pines — ESP32-S3 PaltaCheck (busca el número impreso en la placa)</text>
+
+<text x="24" y="56" font-size="13" font-weight="700" fill="#2563eb">TUS CONEXIONES</text>
+<g font-size="12.5">
+  <rect x="24" y="68" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="84" text-anchor="middle" font-weight="700" fill="#fff">14</text><text x="92" y="84" fill="#1a1a1a">RGB · SDA (I²C)</text>
+  <rect x="24" y="98" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="114" text-anchor="middle" font-weight="700" fill="#fff">21</text><text x="92" y="114" fill="#1a1a1a">RGB · SCL (I²C)</text>
+  <rect x="24" y="128" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="144" text-anchor="middle" font-weight="700" fill="#fff">2</text><text x="92" y="144" fill="#1a1a1a">Humedad (DHT22)</text>
+  <rect x="24" y="158" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="174" text-anchor="middle" font-weight="700" fill="#fff">1</text><text x="92" y="174" fill="#1a1a1a">IR (FC-51)</text>
+  <rect x="24" y="188" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="204" text-anchor="middle" font-weight="700" fill="#fff">46</text><text x="92" y="204" fill="#1a1a1a">Cinta · ENA</text>
+  <rect x="24" y="218" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="234" text-anchor="middle" font-weight="700" fill="#fff">48</text><text x="92" y="234" fill="#1a1a1a">Cinta · IN1 (LED RGB)</text>
+  <rect x="24" y="248" width="58" height="24" rx="6" fill="#888"/><text x="53" y="264" text-anchor="middle" font-weight="700" fill="#fff">GND</text><text x="92" y="264" fill="#1a1a1a">Cinta · IN2 (a GND directo)</text>
+  <rect x="24" y="278" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="294" text-anchor="middle" font-weight="700" fill="#fff">42</text><text x="92" y="294" fill="#1a1a1a">Rodillo 1 · ENA</text>
+  <rect x="24" y="308" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="324" text-anchor="middle" font-weight="700" fill="#fff">41</text><text x="92" y="324" fill="#1a1a1a">Rodillo 1 · IN1</text>
+  <rect x="24" y="338" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="354" text-anchor="middle" font-weight="700" fill="#fff">40</text><text x="92" y="354" fill="#1a1a1a">Rodillo 1 · IN2</text>
+  <rect x="24" y="368" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="384" text-anchor="middle" font-weight="700" fill="#fff">39</text><text x="92" y="384" fill="#1a1a1a">Rodillo 2 · ENB</text>
+  <rect x="24" y="398" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="414" text-anchor="middle" font-weight="700" fill="#fff">38</text><text x="92" y="414" fill="#1a1a1a">Rodillo 2 · IN3</text>
+  <rect x="24" y="428" width="58" height="24" rx="6" fill="#2563eb"/><text x="53" y="444" text-anchor="middle" font-weight="700" fill="#fff">47</text><text x="92" y="444" fill="#1a1a1a">Rodillo 2 · IN4</text>
+  <rect x="24" y="458" width="58" height="24" rx="6" fill="#d98c00"/><text x="53" y="474" text-anchor="middle" font-weight="700" fill="#fff">0</text><text x="92" y="474" fill="#1a1a1a">Servo (compuerta)</text>
+</g>
+
+<text x="430" y="56" font-size="13" font-weight="700" fill="#888">RESERVADOS — NO USAR</text>
+<g font-size="12.5">
+  <rect x="430" y="68" width="92" height="24" rx="6" fill="#888"/><text x="476" y="84" text-anchor="middle" font-weight="700" fill="#fff">4–18</text><text x="532" y="84" fill="#1a1a1a">Cámara</text>
+  <rect x="430" y="98" width="92" height="24" rx="6" fill="#888"/><text x="476" y="114" text-anchor="middle" font-weight="700" fill="#fff">33–37</text><text x="532" y="114" fill="#1a1a1a">PSRAM</text>
+  <rect x="430" y="128" width="92" height="24" rx="6" fill="#888"/><text x="476" y="144" text-anchor="middle" font-weight="700" fill="#fff">19,20</text><text x="532" y="144" fill="#1a1a1a">USB</text>
+  <rect x="430" y="158" width="92" height="24" rx="6" fill="#888"/><text x="476" y="174" text-anchor="middle" font-weight="700" fill="#fff">43,44</text><text x="532" y="174" fill="#1a1a1a">UART (Serial)</text>
+  <rect x="430" y="188" width="92" height="24" rx="6" fill="#888"/><text x="476" y="204" text-anchor="middle" font-weight="700" fill="#fff">45</text><text x="532" y="204" fill="#1a1a1a">strapping flash</text>
+</g>
+
+<text x="430" y="250" font-size="13" font-weight="700" fill="#1a1a1a">ALIMENTACIÓN</text>
+<rect x="430" y="262" width="310" height="92" rx="10" fill="#fafafa" stroke="#ccc" stroke-width="1.4"/>
+<text x="444" y="284" font-size="12" fill="#1a1a1a">ESP32: por USB (5V)</text>
+<text x="444" y="304" font-size="12" fill="#1a1a1a">Motores L298N: fuente 13 V</text>
+<text x="444" y="324" font-size="12" fill="#1a1a1a">Servo: 5 V APARTE (reductor 13→5V)</text>
+<text x="444" y="344" font-size="12" font-weight="700" fill="#1a1a1a">GND COMÚN entre todo</text>
+
+<rect x="430" y="372" width="310" height="86" rx="10" fill="#fff" stroke="#2563eb" stroke-width="1.4"/>
+<text x="444" y="394" font-size="12" font-weight="700" fill="#1a1a1a">Cómo ubicarlos</text>
+<text x="444" y="414" font-size="11.5" fill="#555">Cada GPIO tiene su número impreso en el</text>
+<text x="444" y="431" font-size="11.5" fill="#555">borde de la placa. Busca el número</text>
+<text x="444" y="448" font-size="11.5" fill="#555">(ej. "47") y conecta ahí.</text>
+
+<text x="24" y="504" font-size="11" fill="#555">Azul = lo que tú conectas · Gris = reservado · Naranja = servo (único pin libre)</text>
+</svg>

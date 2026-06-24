@@ -4,3 +4,9 @@ sqlalchemy
 psycopg2-binary
 pydantic
 python-dotenv
+# --- Inferencia del modelo MobileNetV2 (.keras de Keras 3.14) ---
+tensorflow-cpu
+keras>=3.14.0
+pillow
+numpy
+h5py

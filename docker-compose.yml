@@ -25,9 +25,12 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://paltacheck:paltacheck123@timescaledb:5432/paltacheck_db}
       CAPTURAS_DIR: /app/capturas
+      MODEL_PATH: /app/models/modelo_2_mobilenetv2_enfermedades.keras
     volumes:
       # Las fotos JPG persisten fuera del contenedor
       - ./backend/capturas:/app/capturas
+      # Modelos de IA (.keras) montados solo-lectura para la inferencia
+      - ./models:/app/models:ro
     depends_on:
       timescaledb:
         condition: service_healthy

@@ -108,6 +108,15 @@
                   <div class="camara-meta">
                     Palta #{{ ultimaCaptura.id }} · {{ formatHora(ultimaCaptura.timestamp) }}
                   </div>
+                  <div v-if="capturas.length" class="camara-thumbs">
+                    <img
+                      v-for="(c, i) in capturas"
+                      :key="c.key"
+                      :src="c.url"
+                      class="camara-thumb"
+                      :title="'Foto ' + (i + 1)"
+                    />
+                  </div>
                 </template>
                 <div v-else class="camara-empty">
                   <span class="camara-empty-icon">📷</span>
@@ -316,6 +325,21 @@ const ultimaCaptura = computed(() => {
     timestamp: conFoto.timestamp,
   }
 })
+
+// Fotos de la palta actual (las 3 vueltas) para compararlas
+const capturas = ref([])
+async function cargarCapturas() {
+  const id = store.ultimaPalta?.id
+  if (!id) { capturas.value = []; return }
+  try {
+    const { data } = await axios.get(`/api/palta/${id}/fotos`)
+    capturas.value = (data.fotos || []).map((u, i) => ({ key: id + '-' + i, url: apiBase + u }))
+  } catch { capturas.value = [] }
+}
+watch(() => store.ultimaPalta?.id, cargarCapturas, { immediate: true })
+let capturasInterval = null
+onMounted(() => { capturasInterval = setInterval(cargarCapturas, 3000) })
+onUnmounted(() => clearInterval(capturasInterval))
 
 const sensorActual = computed(() => store.ultimaPalta?.sensor || null)
 
@@ -648,7 +672,7 @@ function exportarCSV() {
   display: block;
   width: 100%;
   height: 260px;
-  object-fit: cover;
+  object-fit: contain;   /* muestra la foto cuadrada completa, sin recortar */
   background: #000;
 }
 
@@ -658,6 +682,21 @@ function exportarCSV() {
   color: var(--texto-secondary);
   padding: 8px 12px;
   border-top: 1px solid var(--borde-cards);
+}
+
+.camara-thumbs {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px 12px;
+}
+
+.camara-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  background: #000;
+  border-radius: 6px;
+  border: 1px solid var(--borde-cards);
 }
 
 .camara-empty {

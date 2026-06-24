@@ -168,26 +168,47 @@ def cerrar_lote(lote_id: int, db: Any = Depends(get_db)):
 
 @app.get("/api/lote/{lote_id}/kpis")
 def get_kpis(lote_id: int, db: Any = Depends(get_db)):
-    if db is not None:
-        try:
-            from sqlalchemy import text
-            row = db.execute(
-                text("SELECT * FROM vista_kpis_lote WHERE lote_id = :id"),
-                {"id": lote_id}
-            ).mappings().first()
-            if row:
-                return dict(row)
-        except Exception:
-            pass
+    """KPIs del lote. Se calculan DIRECTO con consultas (no dependen de la vista
+    vista_kpis_lote, que puede no existir si el volumen de la BD es viejo)."""
+    base = {
+        "lote_id": lote_id, "codigo": None, "inicio": None, "fin": None,
+        "total": 0, "sanas": 0, "rechazadas": 0, "tasa_rechazo": 0.0,
+        "confianza_promedio": None, "temp_promedio": None, "humedad_promedio": None,
+    }
+    if db is None:
+        return base
+
+    from models import Lote, Palta, SensorData
+    from sqlalchemy import func as sqlfunc
+
+    lote = db.query(Lote).filter(Lote.id == lote_id).first()
+    total = db.query(sqlfunc.count(Palta.id)).filter(Palta.lote_id == lote_id).scalar() or 0
+    sanas = db.query(sqlfunc.count(Palta.id)).filter(
+        Palta.lote_id == lote_id, Palta.clasificacion == 'sana'
+    ).scalar() or 0
+    rechazadas = db.query(sqlfunc.count(Palta.id)).filter(
+        Palta.lote_id == lote_id, Palta.clasificacion == 'antracnosis'
+    ).scalar() or 0
+    conf = db.query(sqlfunc.avg(Palta.confianza)).filter(Palta.lote_id == lote_id).scalar()
+    temp = db.query(sqlfunc.avg(SensorData.temp)).join(
+        Palta, SensorData.palta_id == Palta.id
+    ).filter(Palta.lote_id == lote_id).scalar()
+    hum = db.query(sqlfunc.avg(SensorData.humedad)).join(
+        Palta, SensorData.palta_id == Palta.id
+    ).filter(Palta.lote_id == lote_id).scalar()
+
     return {
         "lote_id":            lote_id,
-        "total":              0,
-        "sanas":              0,
-        "rechazadas":         0,
-        "tasa_rechazo":       0.0,
-        "confianza_promedio": None,
-        "temp_promedio":      None,
-        "humedad_promedio":   None,
+        "codigo":             lote.codigo if lote else None,
+        "inicio":             lote.inicio.isoformat() if lote and lote.inicio else None,
+        "fin":                lote.fin.isoformat() if lote and lote.fin else None,
+        "total":              total,
+        "sanas":              sanas,
+        "rechazadas":         rechazadas,
+        "tasa_rechazo":       round(rechazadas / total * 100, 2) if total else 0.0,
+        "confianza_promedio": round(float(conf), 4) if conf is not None else None,
+        "temp_promedio":      round(float(temp), 2) if temp is not None else None,
+        "humedad_promedio":   round(float(hum), 2) if hum is not None else None,
     }
 
 
@@ -237,7 +258,7 @@ def recibir_palta(payload: PaltaPayload, db: Any = Depends(get_db)):
         # Sin BD: devolvemos un id ficticio para no romper el flujo de prueba.
         return {"ok": True, "palta_id": None, "sin_bd": True}
 
-    from models import Palta, SensorData
+    from models import Palta, SensorData, Lote
     # Fase actual: los modelos TFLite todavía no están integrados, así que el
     # ESP32 nos manda clasificacion=null. Mientras dura esa fase asumimos
     # "sana" con confianza 0.5 para que la demo del dashboard tenga datos
@@ -267,6 +288,12 @@ def recibir_palta(payload: PaltaPayload, db: Any = Depends(get_db)):
         ir_detectado=payload.ir_detectado,
     )
     db.add(lectura)
+
+    # Actualiza el contador del lote (atributo total_paltas) por cada palta.
+    lote = db.query(Lote).filter(Lote.id == payload.lote_id).first()
+    if lote is not None:
+        lote.total_paltas = (lote.total_paltas or 0) + 1
+
     db.commit()
     db.refresh(palta)
     return {"ok": True, "palta_id": palta.id}
@@ -301,18 +328,62 @@ async def recibir_foto(
 
     ruta_rel = str(ruta.as_posix())
 
-    # Guardar la referencia (no el blob) en la fila palta correspondiente.
+    # Clasificación con el modelo (MobileNetV2) usando ESTA foto.
+    pred = None
+    try:
+        from inference import predecir
+        pred = predecir(img)
+        if pred is not None:
+            print(f"[ML] palta {palta_id}: {pred['enfermedad']} "
+                  f"-> {pred['clasificacion']} ({pred['confianza']*100:.1f}%)")
+    except Exception as e:
+        print(f"[ML] inferencia no disponible: {e}")
+
+    # Guardar la referencia (no el blob) + el veredicto del modelo en la palta.
     if db is not None and palta_id is not None:
         try:
             from models import Palta
             palta = db.query(Palta).filter(Palta.id == palta_id).first()
             if palta is not None:
                 palta.foto_ruta = ruta_rel
+                if pred is not None:
+                    # Cada foto (vuelta) VOTA. La misma palta acumula los 3 votos
+                    # y gana la mayoría -> así 1 palta = 3 fotos comparadas.
+                    if pred["clasificacion"] == "sana":
+                        palta.votos_sana = (palta.votos_sana or 0) + 1
+                    else:
+                        palta.votos_antracnosis = (palta.votos_antracnosis or 0) + 1
+                    vs = palta.votos_sana or 0
+                    va = palta.votos_antracnosis or 0
+                    palta.clasificacion = "sana" if vs > va else "antracnosis"
+                    total = vs + va
+                    palta.confianza = round(max(vs, va) / total, 4) if total else pred["confianza"]
                 db.commit()
         except Exception:
             db.rollback()
 
-    return {"ok": True, "palta_id": palta_id, "foto_ruta": ruta_rel, "bytes": len(img)}
+    return {"ok": True, "palta_id": palta_id, "foto_ruta": ruta_rel,
+            "bytes": len(img), "prediccion": pred}
+
+
+@app.get("/api/palta/{palta_id}/fotos")
+def listar_fotos(palta_id: int):
+    """Lista TODAS las fotos (las 3 vueltas) de una palta, para compararlas."""
+    fotos = []
+    for p in sorted(CAPTURAS_DIR.glob(f"lote_*/palta_{palta_id}_*.jpg")):
+        rel = p.relative_to(CAPTURAS_DIR).as_posix()
+        fotos.append(f"/api/foto?path={rel}")
+    return {"palta_id": palta_id, "fotos": fotos}
+
+
+@app.get("/api/foto")
+def servir_foto(path: str):
+    """Sirve un archivo de captura por ruta relativa (solo dentro de CAPTURAS_DIR)."""
+    full = (CAPTURAS_DIR / path).resolve()
+    base = CAPTURAS_DIR.resolve()
+    if not str(full).startswith(str(base)) or not full.exists():
+        raise HTTPException(status_code=404, detail="Foto no encontrada")
+    return FileResponse(full, media_type="image/jpeg")
 
 
 @app.get("/api/palta/{palta_id}/foto")
