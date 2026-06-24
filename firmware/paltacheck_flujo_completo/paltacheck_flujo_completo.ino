@@ -27,7 +27,7 @@
 // ─── CONFIG WiFi + Backend ──────────────────────────────────────────────────
 const char* SSID         = "Piero";
 const char* PASSWORD     = "12345678";
-const char* BACKEND_HOST = "10.116.108.254";
+const char* BACKEND_HOST = "172.17.45.254";
 const int   BACKEND_PORT = 8000;
 
 // ─── PINES CÁMARA (modelo EYE, fijos) ───────────────────────────────────────
@@ -67,7 +67,7 @@ const int IN3_RODILLO2 = 38;
 const int IN4_RODILLO2 = 47;
 
 // ─── SERVO compuerta ────────────────────────────────────────────────────────
-const int PIN_SERVO        = 0;     // único pin libre que queda (BOOT, sirve como salida)
+const int PIN_SERVO        = 3;     // señal del servo (coincide con el cableado actual)
 const int ANGULO_COMPUERTA = 90;
 const int SERVO_FREQ       = 50;    // Hz (servo estándar)
 const int SERVO_RES        = 16;    // bits de resolución del PWM del servo
@@ -199,7 +199,8 @@ void abortarPorLoteCerrado() {
 // ── Procesa la fruta: rodillos x3 + foto -> el MODELO decide -> servo/bote ───
 void procesarPalta() {
   Serial.println("\n=== Procesando fruta (el modelo decide) ===");
-  String ultimoVeredicto = "";   // "sana" | "antracnosis"
+  String ultimoVeredicto = "";   // veredicto AGREGADO (mayoría de las 3 fotos)
+  int   paltaId = -1;            // UNA sola palta por fruta; las 3 fotos van a ella
 
   for (int i = 1; i <= cantidadVueltas; i++) {
     Serial.printf("\n[Vuelta %d/%d] girando (ambos rodillos)\n", i, cantidadVueltas);
@@ -222,10 +223,10 @@ void procesarPalta() {
     if (fb) Serial.printf("  [CAM] foto %u bytes (%dx%d)\n", fb->len, fb->width, fb->height);
     else    Serial.println("  [CAM] ERROR: sin frame");
 
-    int paltaId = enviarPalta(r,g,b,lux,t,h);          // clasificacion la pone el modelo
+    if (paltaId < 0) paltaId = enviarPalta(r,g,b,lux,t,h);  // crea la palta UNA vez
     if (fb) {
-      String v = enviarFoto(fb, paltaId);              // devuelve el veredicto del modelo
-      if (v.length()) ultimoVeredicto = v;
+      String v = enviarFoto(fb, paltaId);              // sube esta foto a la MISMA palta
+      if (v.length()) ultimoVeredicto = v;             // veredicto agregado por votos
       esp_camera_fb_return(fb);
     }
 
