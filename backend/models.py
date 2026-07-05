@@ -26,6 +26,7 @@ class Palta(Base):
     confianza = Column(Float, nullable=True)
     votos_sana = Column(SmallInteger, default=0)
     votos_antracnosis = Column(SmallInteger, default=0)
+    votos_no_palta = Column(SmallInteger, default=0)   # votos del filtro binario
     foto_ruta = Column(Text, nullable=True)          # ruta en disco de la foto del ciclo
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 

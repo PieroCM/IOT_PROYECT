@@ -1,0 +1,69 @@
+<svg viewBox="0 0 1080 640" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, Arial, sans-serif">
+<rect width="1080" height="640" fill="#fff"/>
+<text x="22" y="30" font-size="18" font-weight="700" fill="#111">PaltaCheck - Conexion total (energia, GND, y senales)</text>
+<rect x="40" y="80" width="130" height="80" rx="10" fill="#c0392b" stroke="#0a1a2e" stroke-width="2"/>
+<text x="105" y="101" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Fuente 12 V</text>
+<text x="105" y="119" text-anchor="middle" font-size="10" fill="#dfe7ee">(+) rojo</text>
+<text x="105" y="134" text-anchor="middle" font-size="10" fill="#dfe7ee">(-) negro</text>
+<rect x="210" y="72" width="210" height="92" rx="10" fill="#10243a" stroke="#0a1a2e" stroke-width="2"/>
+<text x="315" y="93" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">L298N #1 Cinta</text>
+<text x="315" y="111" text-anchor="middle" font-size="10" fill="#dfe7ee">ENA a 46 . IN1 a 48 . IN2 a GND</text>
+<text x="315" y="126" text-anchor="middle" font-size="10" fill="#dfe7ee">+12V in . +5V out al servo</text>
+<rect x="470" y="80" width="170" height="76" rx="10" fill="#5a4a00" stroke="#0a1a2e" stroke-width="2"/>
+<text x="555" y="101" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Servo MG996R</text>
+<text x="555" y="119" text-anchor="middle" font-size="10" fill="#dfe7ee">senal a GPIO 3</text>
+<text x="555" y="134" text-anchor="middle" font-size="10" fill="#dfe7ee">V+ del +5V del L298N1</text>
+<rect x="210" y="210" width="210" height="84" rx="10" fill="#10243a" stroke="#0a1a2e" stroke-width="2"/>
+<text x="315" y="231" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">L298N #2 Rodillos</text>
+<text x="315" y="249" text-anchor="middle" font-size="10" fill="#dfe7ee">ENA42 IN1 41 IN2 40</text>
+<text x="315" y="264" text-anchor="middle" font-size="10" fill="#dfe7ee">ENB39 IN3 38 IN4 47</text>
+<rect x="470" y="250" width="180" height="108" rx="10" fill="#15324f" stroke="#0a1a2e" stroke-width="2"/>
+<text x="560" y="271" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">ESP32-S3</text>
+<text x="560" y="289" text-anchor="middle" font-size="10" fill="#dfe7ee">alim USB 5V</text>
+<text x="560" y="304" text-anchor="middle" font-size="10" fill="#dfe7ee">entrega 3V3 y 5V</text>
+<rect x="720" y="250" width="250" height="56" rx="10" fill="#0f6b2f" stroke="#0a1a2e" stroke-width="2"/>
+<text x="845" y="271" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">RGB TCS34725 (I2C)</text>
+<text x="845" y="289" text-anchor="middle" font-size="10" fill="#dfe7ee">SDA a 14 . SCL a 21 . VIN a 3V3</text>
+<rect x="720" y="322" width="250" height="56" rx="10" fill="#0f6b2f" stroke="#0a1a2e" stroke-width="2"/>
+<text x="845" y="343" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">DHT22 humedad</text>
+<text x="845" y="361" text-anchor="middle" font-size="10" fill="#dfe7ee">DATA a GPIO 2 . VCC a 3V3</text>
+<rect x="720" y="394" width="250" height="56" rx="10" fill="#0f6b2f" stroke="#0a1a2e" stroke-width="2"/>
+<text x="845" y="415" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">IR FC-51</text>
+<text x="845" y="433" text-anchor="middle" font-size="10" fill="#dfe7ee">OUT a GPIO 1 . VCC a 5V</text>
+<line x1="170" y1="105" x2="190" y2="105" stroke="#c0392b" stroke-width="3"/>
+<line x1="190" y1="105" x2="190" y2="250" stroke="#c0392b" stroke-width="3"/>
+<line x1="190" y1="105" x2="210" y2="105" stroke="#c0392b" stroke-width="3"/>
+<line x1="190" y1="250" x2="210" y2="250" stroke="#c0392b" stroke-width="3"/>
+<text x="178" y="98" font-size="10" font-weight="700" fill="#c0392b" text-anchor="start">+12V</text>
+<line x1="420" y1="108" x2="470" y2="108" stroke="#e07b00" stroke-width="3"/>
+<text x="425" y="101" font-size="10" font-weight="700" fill="#e07b00" text-anchor="start">+5V</text>
+<line x1="650" y1="278" x2="690" y2="278" stroke="#caa200" stroke-width="3"/>
+<line x1="690" y1="278" x2="690" y2="350" stroke="#caa200" stroke-width="3"/>
+<line x1="690" y1="278" x2="720" y2="278" stroke="#caa200" stroke-width="3"/>
+<line x1="690" y1="350" x2="720" y2="350" stroke="#caa200" stroke-width="3"/>
+<text x="655" y="271" font-size="10" font-weight="700" fill="#caa200" text-anchor="start">3V3</text>
+<line x1="650" y1="300" x2="705" y2="300" stroke="#e07b00" stroke-width="3"/>
+<line x1="705" y1="300" x2="705" y2="422" stroke="#e07b00" stroke-width="3"/>
+<line x1="705" y1="422" x2="720" y2="422" stroke="#e07b00" stroke-width="3"/>
+<text x="655" y="314" font-size="10" font-weight="700" fill="#e07b00" text-anchor="start">5V</text>
+<line x1="40" y1="520" x2="1010" y2="520" stroke="#222" stroke-width="5"/>
+<text x="40" y="511" font-size="12" font-weight="700" fill="#222" text-anchor="start">GND COMUN  (todo el negro unido en un punto)</text>
+<line x1="105" y1="160" x2="105" y2="520" stroke="#222" stroke-width="2"/>
+<line x1="300" y1="164" x2="300" y2="520" stroke="#222" stroke-width="2"/>
+<line x1="310" y1="294" x2="310" y2="520" stroke="#222" stroke-width="2"/>
+<line x1="555" y1="156" x2="555" y2="520" stroke="#222" stroke-width="2"/>
+<line x1="560" y1="358" x2="560" y2="520" stroke="#222" stroke-width="2"/>
+<line x1="845" y1="306" x2="845" y2="520" stroke="#222" stroke-width="2"/>
+<line x1="845" y1="378" x2="845" y2="520" stroke="#222" stroke-width="2"/>
+<line x1="845" y1="450" x2="845" y2="520" stroke="#222" stroke-width="2"/>
+<text x="470" y="500" font-size="11" font-weight="700" fill="#15324f" text-anchor="start">Las senales (GPIO) van directo del ESP32 al pin que dice cada caja.</text>
+<rect x="40" y="578" width="15" height="15" rx="3" fill="#c0392b"/>
+<text x="61" y="590" font-size="11.5" fill="#333">12V motores</text>
+<rect x="156" y="578" width="15" height="15" rx="3" fill="#e07b00"/>
+<text x="177" y="590" font-size="11.5" fill="#333">5V servo/IR</text>
+<rect x="272" y="578" width="15" height="15" rx="3" fill="#caa200"/>
+<text x="293" y="590" font-size="11.5" fill="#333">3V3 sensores</text>
+<rect x="395" y="578" width="15" height="15" rx="3" fill="#222"/>
+<text x="416" y="590" font-size="11.5" fill="#333">GND comun</text>
+<text x="40" y="624" font-size="10.5" font-weight="700" fill="#922" text-anchor="start">Jumper 5V del L298N1 PUESTO (regula 12 a 5V para el servo) + cap 1000uF al servo. GPIO46: desconectar al subir.</text>
+</svg>

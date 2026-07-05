@@ -347,17 +347,28 @@ async def recibir_foto(
             if palta is not None:
                 palta.foto_ruta = ruta_rel
                 if pred is not None:
-                    # Cada foto (vuelta) VOTA. La misma palta acumula los 3 votos
-                    # y gana la mayoría -> así 1 palta = 3 fotos comparadas.
-                    if pred["clasificacion"] == "sana":
+                    # Cada foto (vuelta) VOTA entre 3 clases. La misma palta
+                    # acumula los 3 votos y gana la mayoría:
+                    #   no_es_palta (filtro binario) / sana / antracnosis
+                    clasif = pred["clasificacion"]
+                    if clasif == "no_es_palta":
+                        palta.votos_no_palta = (palta.votos_no_palta or 0) + 1
+                    elif clasif == "sana":
                         palta.votos_sana = (palta.votos_sana or 0) + 1
                     else:
                         palta.votos_antracnosis = (palta.votos_antracnosis or 0) + 1
+
+                    vn = palta.votos_no_palta or 0
                     vs = palta.votos_sana or 0
                     va = palta.votos_antracnosis or 0
-                    palta.clasificacion = "sana" if vs > va else "antracnosis"
-                    total = vs + va
-                    palta.confianza = round(max(vs, va) / total, 4) if total else pred["confianza"]
+                    # gana la mayoría (empate -> prioridad antracnosis > sana > no_palta)
+                    ganador = max(
+                        [("antracnosis", va), ("sana", vs), ("no_es_palta", vn)],
+                        key=lambda t: t[1],
+                    )
+                    palta.clasificacion = ganador[0]
+                    total = vn + vs + va
+                    palta.confianza = round(ganador[1] / total, 4) if total else pred["confianza"]
                 db.commit()
         except Exception:
             db.rollback()
@@ -396,3 +407,33 @@ def ver_foto(palta_id: int, db: Any = Depends(get_db)):
     if not palta or not palta.foto_ruta or not Path(palta.foto_ruta).exists():
         raise HTTPException(status_code=404, detail="Foto no encontrada")
     return FileResponse(palta.foto_ruta, media_type="image/jpeg")
+
+
+# ─── Probar el modelo con UNA imagen (sin BD, sin lote, sin ESP32) ────────────
+
+@app.post("/api/modelo/probar")
+async def probar_modelo(request: Request):
+    """Prueba rápida del modelo BINARIO con una imagen suelta.
+
+    Envía el JPEG/PNG CRUDO en el cuerpo (Content-Type: image/...). Devuelve el
+    veredicto Palta / No-palta con la confianza. NO toca la BD ni el lote.
+    Úsalo con curl (--data-binary @foto.jpg) o desde scripts/probar_modelo.html."""
+    img = await request.body()
+    if not img or len(img) < 100:
+        raise HTTPException(status_code=400, detail="Imagen vacía o demasiado pequeña")
+    try:
+        from inference import predecir
+        pred = predecir(img)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inferencia no disponible: {e}")
+    if pred is None:
+        raise HTTPException(status_code=503, detail="Modelo no cargado / sin resultado")
+
+    es_palta = pred.get("clasificacion") != "no_es_palta"
+    return {
+        "veredicto":     "Palta" if es_palta else "No palta",
+        "es_palta":      es_palta,
+        "clasificacion": pred.get("clasificacion"),
+        "confianza":     pred.get("confianza"),
+        "probabilidades": pred.get("probabilidades", {}),
+    }

@@ -1,0 +1,27 @@
+{
+  "descripcion": "Etiquetado palta / no_palta revisado a mano (foto por foto) de TODOS los lotes de backend/capturas. Por cada lote: 'default' = clase de la mayoria de sus paltas; 'excepciones' = paltas que NO son de esa clase (por id de palta). 'excluir' = cinta vacia, mano, regla o tomas de prueba borrosas (no entran al dataset).",
+  "clases": ["no_palta", "palta"],
+  "lotes": {
+    "2":  {"default": "excluir",  "nota": "tomas de prueba (borroso/rojo)"},
+    "3":  {"default": "excluir",  "nota": "1 toma muy borrosa/oscura"},
+    "4":  {"default": "excluir",  "nota": "borroso/oscuro"},
+    "6":  {"default": "excluir",  "nota": "toma oscura/basura"},
+    "8":  {"default": "palta",    "excepciones": {"17":"excluir","18":"excluir","19":"excluir","20":"excluir","21":"excluir","22":"excluir","23":"excluir","26":"excluir"}, "nota": "paltas + varias tomas de cinta vacia"},
+    "9":  {"default": "palta",    "excepciones": {"32":"excluir"}},
+    "10": {"default": "palta",    "excepciones": {"35":"excluir"}},
+    "11": {"default": "no_palta", "excepciones": {"41":"excluir"}, "nota": "manzanas verdes"},
+    "13": {"default": "no_palta", "excepciones": {"48":"excluir","50":"excluir","51":"excluir","56":"excluir","57":"excluir","59":"excluir","60":"excluir","61":"excluir","65":"excluir"}, "nota": "frutas redondas con manchas / naranja / mano / regla"},
+    "14": {"default": "no_palta", "excepciones": {"87":"excluir","94":"excluir","98":"excluir"}, "nota": "frutas redondas con manchas / mano"},
+    "15": {"default": "palta",    "excepciones": {"105":"excluir","106":"excluir","107":"excluir"}},
+    "16": {"default": "palta"},
+    "17": {"default": "palta"},
+    "18": {"default": "palta",    "excepciones": {"126":"excluir","127":"excluir"}},
+    "19": {"default": "excluir",  "nota": "lote muy sucio: casi todo cinta/objetos/borroso; no usar"},
+    "20": {"default": "palta",    "excepciones": {"145":"excluir","156":"excluir","157":"excluir","158":"excluir","159":"excluir"}},
+    "21": {"default": "palta",    "excepciones": {"164":"excluir","165":"excluir","166":"excluir","167":"excluir","174":"excluir","175":"excluir","182":"excluir","183":"excluir","184":"excluir","186":"excluir","187":"excluir","188":"excluir","189":"excluir"}, "nota": "paltas + muchas tomas de cinta vacia"},
+    "22": {"default": "palta",    "excepciones": {"197":"no_palta","198":"excluir"}, "nota": "#197 es una naranja"},
+    "23": {"default": "palta",    "excepciones": {"228":"excluir"}, "nota": "lote de paltas (para enfermedad ver entrenar_enfermedad.py)"},
+    "24": {"default": "no_palta", "nota": "mandarina / durazno / manzana / mano"},
+    "25": {"default": "palta",    "excepciones": {"273":"no_palta","277":"no_palta","278":"no_palta"}, "nota": "mezcla paltas y naranjas"}
+  }
+}

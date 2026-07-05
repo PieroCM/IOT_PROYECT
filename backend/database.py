@@ -36,3 +36,14 @@ def init_db():
             Base.metadata.create_all(bind=engine)
         except Exception as e:
             print(f"[DB] Could not create tables: {e}")
+        # Migracion idempotente: agrega columnas nuevas a tablas ya existentes
+        # (create_all NO altera tablas que ya estan creadas). Seguro de re-correr.
+        try:
+            from sqlalchemy import text
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE palta ADD COLUMN IF NOT EXISTS "
+                    "votos_no_palta SMALLINT DEFAULT 0"
+                ))
+        except Exception as e:
+            print(f"[DB] Migracion votos_no_palta: {e}")
