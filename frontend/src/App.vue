@@ -1,14 +1,15 @@
 <template>
   <div class="app-shell">
-    <!-- Mobile hamburger -->
+    <!-- Hamburguesa (solo móvil / táctil) -->
     <button class="hamburger" @click="sidebarOpen = !sidebarOpen" aria-label="Menú">
       <span></span><span></span><span></span>
     </button>
-
-    <!-- Sidebar overlay (mobile) -->
     <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false" />
 
-    <!-- Sidebar -->
+    <!-- Zona de hover: acerca el mouse al borde izquierdo y el menú se abre solo -->
+    <div class="edge-hover" aria-hidden="true"><span class="edge-hint">☰</span></div>
+
+    <!-- Sidebar (oculto; se muestra al hacer hover en el borde o con la hamburguesa) -->
     <aside class="sidebar" :class="{ 'sidebar--open': sidebarOpen }">
       <div class="sidebar-logo">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -46,7 +47,7 @@
       </div>
     </aside>
 
-    <!-- Main content -->
+    <!-- Contenido principal (ocupa todo el ancho; el menú flota encima) -->
     <main class="main-content">
       <RouterView />
     </main>
@@ -64,9 +65,6 @@ let healthInterval = null
 
 onMounted(async () => {
   store.fetchHealth()
-  // Restaura el lote que siga abierto en el backend: así un F5/refresh NO pierde
-  // el lote, se mantiene. (El lote solo se cierra al pulsar "Cerrar Lote" o al
-  // abrir otro nuevo, que cierra los remanentes en el backend.)
   await store.fetchLoteActivo()
   store.iniciarPolling()
   healthInterval = setInterval(() => store.fetchHealth(), 15000)
@@ -83,146 +81,100 @@ onUnmounted(() => {
   display: flex;
   height: 100vh;
   overflow: hidden;
+  position: relative;
 }
 
-/* ── Sidebar ── */
+/* ── Zona de hover (borde izquierdo) ── */
+.edge-hover {
+  position: fixed;
+  left: 0; top: 0;
+  width: 16px; height: 100%;
+  z-index: 250;
+}
+.edge-hover::before {   /* franjita visible: pista de que hay un menú */
+  content: '';
+  position: absolute; left: 0; top: 0;
+  width: 5px; height: 100%;
+  background: linear-gradient(180deg, var(--verde-acento), var(--verde-primary));
+}
+.edge-hint {
+  position: absolute; top: 50%; left: 5px; transform: translateY(-50%);
+  color: #fff; background: var(--verde-primary);
+  border-radius: 0 8px 8px 0; padding: 10px 7px;
+  font-size: 1rem; line-height: 1;
+  box-shadow: 1px 1px 5px rgba(0,0,0,.25);
+  transition: opacity .2s;
+}
+
+/* ── Sidebar (oculto por defecto; slide-in al hover o hamburguesa) ── */
 .sidebar {
+  position: fixed;
+  left: 0; top: 0;
+  height: 100%;
   width: 240px;
-  flex-shrink: 0;
   background: var(--verde-primary);
   color: #fff;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  z-index: 200;
+  z-index: 300;
+  transform: translateX(-100%);
   transition: transform 0.25s ease;
+  box-shadow: 2px 0 18px rgba(0,0,0,0.2);
 }
+/* Se abre al: acercar el mouse al borde, pasar sobre el propio menú, o hamburguesa */
+.edge-hover:hover ~ .sidebar,
+.sidebar:hover,
+.sidebar--open {
+  transform: translateX(0);
+}
+/* Oculta la pista mientras el menú está abierto por hover */
+.edge-hover:hover .edge-hint { opacity: 0; }
 
 .sidebar-logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 24px 20px;
-  font-size: 1.2rem;
-  font-weight: 700;
+  display: flex; align-items: center; gap: 10px;
+  padding: 24px 20px; font-size: 1.2rem; font-weight: 700;
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
-
-.sidebar-nav {
-  flex: 1;
-  padding: 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
+.sidebar-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
 .sidebar-nav a {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  color: rgba(255,255,255,0.8);
-  text-decoration: none;
-  font-size: 0.9rem;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 8px;
+  color: rgba(255,255,255,0.8); text-decoration: none; font-size: 0.9rem;
   transition: background 0.15s, color 0.15s;
 }
-
-.sidebar-nav a:hover,
-.sidebar-nav a.active {
-  background: rgba(255,255,255,0.12);
-  color: #fff;
-}
-
-.sidebar-status {
-  padding: 20px;
-  border-top: 1px solid rgba(255,255,255,0.1);
-}
-
-.esp32-badge {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.82rem;
-  color: rgba(255,255,255,0.9);
-}
-
-.dot-wrap {
-  position: relative;
-  width: 10px;
-  height: 10px;
-  flex-shrink: 0;
-}
-
-.dot {
-  display: block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.dot--green  { background: var(--verde-acento); }
-.dot--gray   { background: var(--texto-secondary); }
+.sidebar-nav a:hover, .sidebar-nav a.active { background: rgba(255,255,255,0.12); color: #fff; }
+.sidebar-status { padding: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
+.esp32-badge { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: rgba(255,255,255,0.9); }
+.dot-wrap { position: relative; width: 10px; height: 10px; flex-shrink: 0; }
+.dot { display: block; width: 10px; height: 10px; border-radius: 50%; }
+.dot--green { background: var(--verde-acento); }
+.dot--gray  { background: var(--texto-secondary); }
 
 /* ── Main ── */
 .main-content {
   flex: 1;
+  width: 100%;
   overflow: auto;
   background: var(--fondo-pagina);
   display: flex;
   flex-direction: column;
 }
 
-/* ── Hamburger (mobile only) ── */
+/* ── Hamburguesa (móvil) ── */
 .hamburger {
   display: none;
-  position: fixed;
-  top: 14px;
-  left: 14px;
-  z-index: 300;
-  background: var(--verde-primary);
-  border: none;
-  border-radius: 6px;
-  padding: 8px 10px;
-  flex-direction: column;
-  gap: 5px;
+  position: fixed; top: 14px; left: 14px; z-index: 320;
+  background: var(--verde-primary); border: none; border-radius: 6px;
+  padding: 8px 10px; flex-direction: column; gap: 5px;
 }
+.hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 290; }
 
-.hamburger span {
-  display: block;
-  width: 20px;
-  height: 2px;
-  background: #fff;
-  border-radius: 2px;
-}
-
-.sidebar-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.4);
-  z-index: 150;
-}
-
-/* ── Responsive ── */
+/* ── Responsive: en móvil no hay hover -> hamburguesa ── */
 @media (max-width: 768px) {
+  .edge-hover { display: none; }
   .hamburger { display: flex; }
   .sidebar-overlay { display: block; }
-
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100%;
-    transform: translateX(-100%);
-  }
-
-  .sidebar--open {
-    transform: translateX(0);
-  }
-
-  .main-content {
-    padding-top: 52px;
-  }
+  .main-content { padding-top: 52px; }
 }
 </style>
