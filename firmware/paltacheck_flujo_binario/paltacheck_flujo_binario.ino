@@ -13,9 +13,9 @@
      1) Cinta avanza HASTA que el IR detecta la fruta (LOW, con debounce).
      2) Al detectar, la cinta sigue 5 s MÁS (cae a rodillos) y RECIÉN para.
      3) Espera 2 s con la fruta en los rodillos.
-     4) 3 rondas: gira rodillos 4 s -> para -> ~0.5 s estabiliza -> foto fresca ->
-        el GATE decide: si ES palta toma sensores (TCS/DHT) y corre enfermedad;
-        si NO es palta, OMITE sensores+enfermedad (eficiencia, no promediable).
+     4) 3 VUELTAS. Cada vuelta: GIRA rodillos -> ESPERA -> FOTO -> ESPERA -> vuelve
+        a girar. En cada foto el GATE decide: si ES palta toma sensores (TCS/DHT) y
+        corre enfermedad; si NO es palta OMITE sensores+enfermedad (no promediable).
      5) Decide con el veredicto AGREGADO: EXPULSA (servo 90° 10 s + rodillos 5 s)
         si no_es_palta/antracnosis/scab; PASA si sana; sin respuesta -> deja pasar.
      6) Si se cierra el lote, frena todo.
@@ -88,12 +88,13 @@ const int dutyLento                 = 120;
 const int tiempoArranqueMs          = 200;
 // ─── TIEMPOS del flujo (todos aquí arriba, fáciles de tunear) ───────────────
 const unsigned long tiempoCintaExtra    = 5000;  // tras detectar IR, la cinta sigue 5 s y RECIÉN para
-const unsigned long tiempoEnRodillos    = 2000;  // 2 s con la fruta ya en los rodillos
-const unsigned long tiempoGiroRodillos  = 4000;  // gira ambos rodillos 4 s por ronda
-const unsigned long tiempoEstabilizacion = 500;  // ~0.5 s quieto antes de la foto (sin motion blur)
+const unsigned long tiempoEnRodillos    = 2000;  // 2 s con la fruta en los rodillos antes de empezar
+const unsigned long tiempoGiroRodillos  = 4000;  // (1) GIRA los rodillos 4 s por vuelta
+const unsigned long tiempoAntesFoto     = 2000;  // (2) ESPERA tras girar, ANTES de la foto (se asienta)
+const unsigned long tiempoDespuesFoto   = 2000;  // (4) ESPERA tras la foto, antes de volver a girar
 const unsigned long tiempoServoArriba   = 10000; // 10 s con la compuerta levantada (90°)
 const unsigned long tiempoExpulsion     = 5000;  // 5 s de rodillos de expulsión con fuerza
-const int cantidadVueltas               = 3;     // 3 fotos por fruta (el backend vota)
+const int cantidadVueltas               = 3;     // 3 VUELTAS por fruta (el backend vota)
 const int IR_DEBOUNCE_MS        = 60;
 const unsigned long IR_RELEASE_TIMEOUT = 10000;
 // ─── Sensores ───────────────────────────────────────────────────────────────
@@ -213,51 +214,57 @@ void abortarPorLoteCerrado() {
   detenerTodo();
   Serial.println("[!] Lote cerrado -> FRENO todo\n");
 }
-// ── Procesa la fruta: 2 s en rodillos + 3 rondas. En cada ronda: foto -> el GATE
-//    decide; si ES palta toma sensores (+ el backend corre enfermedad), si NO es
-//    palta se OMITE (eficiencia, no promediable). Decide con el veredicto AGREGADO ─
+// ── Procesa la fruta: 3 VUELTAS. Cada vuelta: GIRA -> ESPERA -> FOTO -> ESPERA.
+//    En cada foto el backend corre el GATE; si ES palta toma sensores (+ enfermedad),
+//    si NO es palta se OMITE (eficiencia, no promediable). Al final decide con el
+//    veredicto AGREGADO (voto de las fotos). ───────────────────────────────────
 void procesarPalta() {
-  Serial.println("\n=== Procesando fruta (3 fotos, el backend vota) ===");
-  // (3) Espera con la fruta ya en los rodillos antes de empezar a girar.
+  Serial.println("\n=== Procesando fruta (3 vueltas, el backend vota) ===");
+  // Espera con la fruta ya en los rodillos antes de empezar a girar.
   Serial.printf("[...] %lu ms con la fruta en los rodillos\n", tiempoEnRodillos);
   if (!dormirVigilando(tiempoEnRodillos)) { abortarPorLoteCerrado(); return; }
 
   String veredicto = "";        // veredicto AGREGADO (lo calcula el backend votando)
   int    paltaId   = -1;        // UNA palta por fruta; las 3 fotos van a la MISMA
   for (int i = 1; i <= cantidadVueltas; i++) {
-    // (4a) gira ambos rodillos y detiene
-    Serial.printf("\n[Ronda %d/%d] girando rodillos %lu ms\n", i, cantidadVueltas, tiempoGiroRodillos);
+    // (1) GIRA los rodillos
+    Serial.printf("\n[Vuelta %d/%d] gira rodillos %lu ms\n", i, cantidadVueltas, tiempoGiroRodillos);
     if (!girarPaltaEnRodillos(tiempoGiroRodillos)) { abortarPorLoteCerrado(); return; }
-    // (4b) pausa de estabilización (foto sin movimiento)
-    if (!dormirVigilando(tiempoEstabilizacion)) { abortarPorLoteCerrado(); return; }
-    // (4c) captura foto fresca
+    // (2) ESPERA (que se asiente, foto sin movimiento)
+    Serial.printf("  espera %lu ms, luego foto\n", tiempoAntesFoto);
+    if (!dormirVigilando(tiempoAntesFoto)) { abortarPorLoteCerrado(); return; }
+    // (3) TOMA FOTO -> el backend corre el GATE (palta/no_palta) y la enfermedad
     camera_fb_t* fb = capturarFresca();
-    if (!fb) { Serial.println("  [CAM] ERROR: sin frame -> salto ronda"); continue; }
-    Serial.printf("  [CAM] foto %u bytes (%dx%d)\n", fb->len, fb->width, fb->height);
-    // (4d) crea la palta la 1a vez (SIN sensores: aún no sabemos si es palta)
-    if (paltaId < 0) paltaId = enviarPalta();
-    // (4e) sube SOLO la foto -> el GATE decide. Devuelve el veredicto de ESTA foto
-    //      y (por referencia) el AGREGADO.
-    String agregada = "";
-    String perfoto = enviarFoto(fb, paltaId, agregada);
-    esp_camera_fb_return(fb);
-    if (agregada.length()) veredicto = agregada;
-    // (4f) SOLO si el gate confirma que ES palta: toma sensores (el backend además
-    //      corre el modelo de enfermedad). Si NO es palta -> se OMITE todo.
-    bool esPaltaRonda = (perfoto.length() && perfoto != "no_es_palta");
-    if (esPaltaRonda) {
-      int r=-1, g=-1, b=-1; float lux=NAN, t=NAN, h=NAN;
-      if (tcsOK) {
-        uint16_t R,G,B,C; tcs.getRawData(&R,&G,&B,&C);
-        lux = tcs.calculateLux(R,G,B); r=map8(R,C); g=map8(G,C); b=map8(B,C);
-        Serial.printf("  [TCS] R=%u G=%u B=%u Lux=%.1f\n", R,G,B,lux);
+    if (fb) {
+      Serial.printf("  [CAM] foto %u bytes (%dx%d)\n", fb->len, fb->width, fb->height);
+      if (paltaId < 0) paltaId = enviarPalta();          // crea la palta la 1a vez (sin sensores)
+      String agregada = "";
+      String perfoto = enviarFoto(fb, paltaId, agregada); // per-foto + AGREGADO (por ref)
+      esp_camera_fb_return(fb);
+      if (agregada.length()) veredicto = agregada;
+      // GATE de esta vuelta: si ES palta toma sensores; si NO es palta, OMITE todo.
+      bool esPaltaVuelta = (perfoto.length() && perfoto != "no_es_palta");
+      if (esPaltaVuelta) {
+        int r=-1, g=-1, b=-1; float lux=NAN, t=NAN, h=NAN;
+        if (tcsOK) {
+          uint16_t R,G,B,C; tcs.getRawData(&R,&G,&B,&C);
+          lux = tcs.calculateLux(R,G,B); r=map8(R,C); g=map8(G,C); b=map8(B,C);
+          Serial.printf("  [TCS] R=%u G=%u B=%u Lux=%.1f\n", R,G,B,lux);
+        }
+        t = dht.readTemperature(); h = dht.readHumidity();
+        if (!isnan(t) && !isnan(h)) Serial.printf("  [DHT] T=%.1fC HR=%.1f%%\n", t, h);
+        enviarSensores(paltaId, r,g,b,lux,t,h);
+      } else {
+        Serial.printf("  [GATE] foto='%s' -> NO es palta: OMITO sensores y enfermedad\n",
+                      perfoto.length() ? perfoto.c_str() : "sin respuesta");
       }
-      t = dht.readTemperature(); h = dht.readHumidity();
-      if (!isnan(t) && !isnan(h)) Serial.printf("  [DHT] T=%.1fC HR=%.1f%%\n", t, h);
-      enviarSensores(paltaId, r,g,b,lux,t,h);
     } else {
-      Serial.printf("  [GATE] foto='%s' -> NO es palta: OMITO sensores y enfermedad\n",
-                    perfoto.length() ? perfoto.c_str() : "sin respuesta");
+      Serial.println("  [CAM] ERROR: sin frame (esta vuelta no aporta foto)");
+    }
+    // (4) ESPERA antes de volver a girar (separa CLARAMENTE las vueltas)
+    if (i < cantidadVueltas) {
+      Serial.printf("  espera %lu ms y vuelve a girar\n", tiempoDespuesFoto);
+      if (!dormirVigilando(tiempoDespuesFoto)) { abortarPorLoteCerrado(); return; }
     }
   }
   if (!loteActivo) { abortarPorLoteCerrado(); return; }
