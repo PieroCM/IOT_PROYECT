@@ -172,7 +172,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import axios from 'axios'
 import { usePaltaStore } from '../stores/palta'
 
@@ -233,19 +233,26 @@ const rgbColor = (s) => (s && s.r != null && s.g != null && s.b != null)
   ? `rgb(${s.r}, ${s.g}, ${s.b})` : 'var(--borde-cards)'
 const rgbText = (s) => (s && s.r != null) ? `${s.r},${s.g},${s.b}` : '—'
 
-// ── Foto en vivo (última fruta) ──────────────────────────
+// ── Foto en vivo (fotos de la ÚLTIMA fruta, sus 3 vueltas) ───────────────────
 const capturas = ref([])
 async function cargarCapturas() {
   const id = store.ultimaPalta?.id
   if (!id) { capturas.value = []; return }
   try {
     const { data } = await axios.get(`/api/palta/${id}/fotos`)
+    // Si mientras cargábamos cambió la palta (siguiente fruta), descarta el
+    // resultado viejo -> nunca mostramos fotos de la palta anterior.
+    if (store.ultimaPalta?.id !== id) return
     capturas.value = (data.fotos || []).map((u, i) => ({ key: id + '-' + i, url: apiBase + u }))
-  } catch { capturas.value = [] }
+  } catch {
+    if (store.ultimaPalta?.id === id) capturas.value = []
+  }
 }
 const fotoUrl = computed(() => capturas.value.length ? capturas.value[capturas.value.length - 1].url : null)
+// Al cambiar de fruta: LIMPIA ya las fotos (no arrastrar las de la anterior) y recarga.
+watch(() => store.ultimaPalta?.id, () => { capturas.value = []; cargarCapturas() })
 let capturasInterval = null
-onMounted(() => { cargarCapturas(); capturasInterval = setInterval(cargarCapturas, 3000) })
+onMounted(() => { cargarCapturas(); capturasInterval = setInterval(cargarCapturas, 2000) })
 onUnmounted(() => clearInterval(capturasInterval))
 
 // ── Utils / acciones ─────────────────────────────────────

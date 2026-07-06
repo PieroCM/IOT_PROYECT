@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from database import get_db, init_db
 
 # Carpeta donde se guardan las fotos JPG que envía el ESP32 (en disco, NO en la BD).
@@ -429,11 +429,33 @@ def actualizar_sensores(palta_id: int, payload: SensoresPayload, db: Any = Depen
 
 
 @app.get("/api/palta/{palta_id}/fotos")
-def listar_fotos(palta_id: int):
-    """Lista TODAS las fotos (las 3 vueltas) de una palta, para compararlas."""
+def listar_fotos(palta_id: int, db: Any = Depends(get_db)):
+    """Lista las fotos de las vueltas de UNA palta. Para no mezclar fotos de OTRO
+    lote/palta (ids reciclados tras reiniciar la BD, o residuos en disco):
+      1) se limita a la carpeta del lote al que pertenece ESTA palta, y
+      2) descarta fotos anteriores a la creación de la palta (por fecha de archivo)."""
+    lote_id, desde = None, None
+    if db is not None:
+        try:
+            from models import Palta
+            p = db.query(Palta).filter(Palta.id == palta_id).first()
+            if p is not None:
+                lote_id = p.lote_id
+                desde = p.timestamp
+        except Exception:
+            pass
+    patron = (f"lote_{lote_id}/palta_{palta_id}_*.jpg"
+              if lote_id is not None else f"lote_*/palta_{palta_id}_*.jpg")
     fotos = []
-    for p in sorted(CAPTURAS_DIR.glob(f"lote_*/palta_{palta_id}_*.jpg")):
-        rel = p.relative_to(CAPTURAS_DIR).as_posix()
+    for ph in sorted(CAPTURAS_DIR.glob(patron)):
+        if desde is not None:
+            try:
+                mt = datetime.fromtimestamp(ph.stat().st_mtime, tz=timezone.utc)
+                if mt < desde - timedelta(seconds=60):   # foto residual de una corrida anterior
+                    continue
+            except Exception:
+                pass
+        rel = ph.relative_to(CAPTURAS_DIR).as_posix()
         fotos.append(f"/api/foto?path={rel}")
     return {"palta_id": palta_id, "fotos": fotos}
 
