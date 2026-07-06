@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, SmallInteger, String, Float, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -22,11 +23,14 @@ class Palta(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     lote_id = Column(Integer, ForeignKey("lote.id", ondelete="CASCADE"), nullable=False)
-    clasificacion = Column(String, nullable=True)   # 'sana' | 'antracnosis' | 'no_es_palta'
-    confianza = Column(Float, nullable=True)
+    clasificacion = Column(String, nullable=True)   # 'sana' | 'antracnosis' | 'scab' | 'no_es_palta'
+    confianza = Column(Float, nullable=True)         # confianza de la clase ganadora
+    confianza_gate = Column(Float, nullable=True)    # prob del gate de que ES palta
+    probabilidades = Column(JSONB, nullable=True)    # probs de enfermedad {sana,antracnosis,scab}
     votos_sana = Column(SmallInteger, default=0)
     votos_antracnosis = Column(SmallInteger, default=0)
-    votos_no_palta = Column(SmallInteger, default=0)   # votos del filtro binario
+    votos_scab = Column(SmallInteger, default=0)       # voto de la clase scab
+    votos_no_palta = Column(SmallInteger, default=0)   # votos del gate binario
     foto_ruta = Column(Text, nullable=True)          # ruta en disco de la foto del ciclo
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 

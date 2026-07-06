@@ -25,11 +25,15 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://paltacheck:paltacheck123@timescaledb:5432/paltacheck_db}
       CAPTURAS_DIR: /app/capturas
-      MODEL_PATH: /app/models/modelo_2_mobilenetv2_enfermedades.keras
+      # Cadena de inferencia: gate Keras (palta/no_palta) + enfermedad ONNX (3 clases)
+      DISEASE_ENABLED:     ${DISEASE_ENABLED:-true}
+      BINARY_MODEL_PATH:   /app/models/best_model.keras
+      DISEASE_MODEL_PATH:  /app/models/modelo_antracnosis.onnx
+      DISEASE_CLASSES_PATH: /app/models/modelo_antracnosis_classes.json
     volumes:
       # Las fotos JPG persisten fuera del contenedor
       - ./backend/capturas:/app/capturas
-      # Modelos de IA (.keras) montados solo-lectura para la inferencia
+      # Modelos de IA (.keras del gate + .onnx de enfermedad) montados solo-lectura
       - ./models:/app/models:ro
     depends_on:
       timescaledb:

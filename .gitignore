@@ -12,3 +12,13 @@ backend/capturas/
 capturas/
 *.jpg
 fotos_test/
+
+# Datos de entrenamiento y capturas (NO se versionan: son pesados)
+data/
+*.zip
+# Entornos virtuales de Python
+.venv/
+venv/
+# Artefactos de entrenamiento (los .pt/.onnx de salida). Los modelos SERVIDOS
+# viven en models/ y SÍ se versionan (no se ignoran aquí).
+ml_antracnosis/outputs/

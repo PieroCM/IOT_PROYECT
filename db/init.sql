@@ -28,12 +28,16 @@ CREATE TABLE IF NOT EXISTS lote (
 CREATE TABLE IF NOT EXISTS palta (
     id                 SERIAL PRIMARY KEY,
     lote_id            INTEGER     NOT NULL REFERENCES lote(id) ON DELETE CASCADE,
-    -- clasificacion: 'sana' | 'antracnosis' | 'no_es_palta'. NULL mientras
-    -- todavia no se integran los modelos TFLite (fase actual: solo captura).
-    clasificacion      VARCHAR(20) CHECK (clasificacion IN ('sana', 'antracnosis', 'no_es_palta')),
-    confianza          FLOAT       CHECK (confianza >= 0 AND confianza <= 1),
+    -- clasificacion: 'sana' | 'antracnosis' | 'scab' | 'no_es_palta'. NULL hasta
+    -- que llega la primera foto y el modelo (gate Keras + enfermedad ONNX) decide.
+    clasificacion      VARCHAR(20) CHECK (clasificacion IN ('sana', 'antracnosis', 'scab', 'no_es_palta')),
+    confianza          FLOAT       CHECK (confianza >= 0 AND confianza <= 1),   -- clase ganadora
+    confianza_gate     FLOAT,           -- prob del gate de que ES palta
+    probabilidades     JSONB,           -- probs de enfermedad {sana,antracnosis,scab}
     votos_sana         SMALLINT    NOT NULL DEFAULT 0,
     votos_antracnosis  SMALLINT    NOT NULL DEFAULT 0,
+    votos_scab         SMALLINT    NOT NULL DEFAULT 0,
+    votos_no_palta     SMALLINT    NOT NULL DEFAULT 0,
     -- Ruta en disco de la foto representativa del ciclo (la imagen NO se
     -- guarda dentro de la BD: el JPEG ya viene comprimido y meterlo en la
     -- hypertable la infla. Aqui solo va la referencia).
@@ -109,12 +113,12 @@ SELECT
     l.inicio,
     l.fin,
     COUNT(DISTINCT p.id)                        AS total,
-    COUNT(DISTINCT p.id) FILTER (WHERE p.clasificacion = 'sana')        AS sanas,
-    COUNT(DISTINCT p.id) FILTER (WHERE p.clasificacion = 'antracnosis') AS rechazadas,
+    COUNT(DISTINCT p.id) FILTER (WHERE p.clasificacion = 'sana')                       AS sanas,
+    COUNT(DISTINCT p.id) FILTER (WHERE p.clasificacion IN ('antracnosis','scab'))      AS rechazadas,
     ROUND(
         CASE
             WHEN COUNT(DISTINCT p.id) = 0 THEN 0
-            ELSE COUNT(DISTINCT p.id) FILTER (WHERE p.clasificacion = 'antracnosis')::NUMERIC
+            ELSE COUNT(DISTINCT p.id) FILTER (WHERE p.clasificacion IN ('antracnosis','scab'))::NUMERIC
                  / COUNT(DISTINCT p.id) * 100
         END, 2
     )                                           AS tasa_rechazo,

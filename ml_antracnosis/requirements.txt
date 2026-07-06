@@ -1,0 +1,14 @@
+# ── PaltaCheck · clasificador antracnosis ──────────────────────────────
+# PyTorch con CUDA se instala APARTE (ver README, paso 2) para tu RTX 4060:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+#
+# El resto de dependencias:
+numpy
+opencv-python
+pillow
+pandas
+scikit-learn
+matplotlib
+tqdm
+onnx
+onnxruntime

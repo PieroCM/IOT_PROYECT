@@ -107,16 +107,8 @@ export const usePaltaStore = defineStore('palta', {
         const { data } = await axios.get('/api/lotes')
         this.historial = data
       } catch {
-        // fallback mock when backend lacks the endpoint
-        this.historial = [
-          { id: 7, codigo: 'LOTE-2024-007', inicio: '2026-03-26T10:30:00', fin: '2026-03-26T11:20:00', total: 47, sanas: 38, rechazadas: 9, temp_promedio: 22.4, humedad_promedio: 65, confianza_promedio: 87.4 },
-          { id: 6, codigo: 'LOTE-2024-006', inicio: '2026-03-25T15:45:00', fin: '2026-03-25T16:30:00', total: 50, sanas: 46, rechazadas: 4, temp_promedio: 21.8, humedad_promedio: 63, confianza_promedio: 89.2 },
-          { id: 5, codigo: 'LOTE-2024-005', inicio: '2026-03-25T09:15:00', fin: '2026-03-25T10:05:00', total: 48, sanas: 42, rechazadas: 6, temp_promedio: 22.1, humedad_promedio: 64, confianza_promedio: 88.1 },
-          { id: 4, codigo: 'LOTE-2024-004', inicio: '2026-03-24T14:20:00', fin: '2026-03-24T15:15:00', total: 50, sanas: 35, rechazadas: 15, temp_promedio: 23.2, humedad_promedio: 68, confianza_promedio: 85.3 },
-          { id: 3, codigo: 'LOTE-2024-003', inicio: '2026-03-24T08:50:00', fin: '2026-03-24T09:45:00', total: 45, sanas: 41, rechazadas: 4, temp_promedio: 21.5, humedad_promedio: 62, confianza_promedio: 90.1 },
-          { id: 2, codigo: 'LOTE-2024-002', inicio: '2026-03-23T16:10:00', fin: '2026-03-23T17:00:00', total: 50, sanas: 45, rechazadas: 5, temp_promedio: 22.0, humedad_promedio: 64, confianza_promedio: 88.7 },
-          { id: 1, codigo: 'LOTE-2024-001', inicio: '2026-03-23T11:30:00', fin: '2026-03-23T12:20:00', total: 48, sanas: 44, rechazadas: 4, temp_promedio: 21.9, humedad_promedio: 63, confianza_promedio: 89.5 },
-        ]
+        // Sin datos inventados: si falla, se deja vacío (solo lotes REALES).
+        this.historial = []
       } finally {
         this.loading = false
       }

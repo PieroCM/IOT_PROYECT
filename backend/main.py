@@ -81,7 +81,7 @@ def listar_lotes(db: Any = Depends(get_db)):
             Palta.lote_id == l.id, Palta.clasificacion == 'sana'
         ).scalar() or 0
         rechazo = db.query(sqlfunc.count(Palta.id)).filter(
-            Palta.lote_id == l.id, Palta.clasificacion == 'antracnosis'
+            Palta.lote_id == l.id, Palta.clasificacion.in_(['antracnosis', 'scab'])
         ).scalar() or 0
         temp_prom = db.query(sqlfunc.avg(SensorData.temp)).join(
             Palta, SensorData.palta_id == Palta.id
@@ -187,7 +187,7 @@ def get_kpis(lote_id: int, db: Any = Depends(get_db)):
         Palta.lote_id == lote_id, Palta.clasificacion == 'sana'
     ).scalar() or 0
     rechazadas = db.query(sqlfunc.count(Palta.id)).filter(
-        Palta.lote_id == lote_id, Palta.clasificacion == 'antracnosis'
+        Palta.lote_id == lote_id, Palta.clasificacion.in_(['antracnosis', 'scab'])
     ).scalar() or 0
     conf = db.query(sqlfunc.avg(Palta.confianza)).filter(Palta.lote_id == lote_id).scalar()
     temp = db.query(sqlfunc.avg(SensorData.temp)).join(
@@ -224,13 +224,11 @@ def get_paltas(lote_id: int, db: Any = Depends(get_db)):
             SensorData.palta_id == p.id
         ).order_by(SensorData.timestamp.desc()).first()
         result.append({
-            "id":            p.id,
-            "lote_id":       p.lote_id,
-            "clasificacion": p.clasificacion,
+            "id":            p.id,   # uso interno (key + foto_url); el UI NO lo muestra
+            "clasificacion": p.clasificacion,     # sana | antracnosis | scab | no_es_palta
             "confianza":     p.confianza,
-            "votos_sana":         p.votos_sana,
-            "votos_antracnosis":  p.votos_antracnosis,
-            "foto_ruta":     p.foto_ruta,
+            "confianza_gate": p.confianza_gate,   # prob del gate de que ES palta
+            "probabilidades": p.probabilidades,   # {sana,antracnosis,scab} o None
             "foto_url":      f"/api/palta/{p.id}/foto" if p.foto_ruta else None,
             "timestamp":     p.timestamp.isoformat() if p.timestamp else None,
             "sensor": {
@@ -259,18 +257,14 @@ def recibir_palta(payload: PaltaPayload, db: Any = Depends(get_db)):
         return {"ok": True, "palta_id": None, "sin_bd": True}
 
     from models import Palta, SensorData, Lote
-    # Fase actual: los modelos TFLite todavía no están integrados, así que el
-    # ESP32 nos manda clasificacion=null. Mientras dura esa fase asumimos
-    # "sana" con confianza 0.5 para que la demo del dashboard tenga datos
-    # consistentes (sin esto, el UI muestra todo como "Antracnosis" porque
-    # interpreta null === no-sana).
-    clasificacion = payload.clasificacion if payload.clasificacion else "sana"
-    confianza     = payload.confianza     if payload.confianza is not None else 0.5
-
+    # El veredicto REAL lo asigna /api/captura/foto (el modelo corre en el
+    # backend sobre cada foto). Aquí solo creamos la cabecera de la palta con lo
+    # que mande el ESP32 (normalmente clasificacion=null hasta que llega la
+    # primera foto); NO inventamos 'sana'/0.5.
     palta = Palta(
         lote_id=payload.lote_id,
-        clasificacion=clasificacion,
-        confianza=confianza,
+        clasificacion=payload.clasificacion,   # puede ser None; se llena con la foto
+        confianza=payload.confianza,
         votos_sana=payload.votos_sana or 0,
         votos_antracnosis=payload.votos_antracnosis or 0,
     )
@@ -347,34 +341,45 @@ async def recibir_foto(
             if palta is not None:
                 palta.foto_ruta = ruta_rel
                 if pred is not None:
-                    # Cada foto (vuelta) VOTA entre 3 clases. La misma palta
-                    # acumula los 3 votos y gana la mayoría:
-                    #   no_es_palta (filtro binario) / sana / antracnosis
+                    # Cada foto (vuelta) VOTA entre 4 salidas. La misma palta
+                    # acumula los votos y gana la mayoría:
+                    #   no_es_palta (gate) / sana / antracnosis / scab
                     clasif = pred["clasificacion"]
                     if clasif == "no_es_palta":
                         palta.votos_no_palta = (palta.votos_no_palta or 0) + 1
-                    elif clasif == "sana":
-                        palta.votos_sana = (palta.votos_sana or 0) + 1
-                    else:
+                    elif clasif == "antracnosis":
                         palta.votos_antracnosis = (palta.votos_antracnosis or 0) + 1
+                    elif clasif == "scab":
+                        palta.votos_scab = (palta.votos_scab or 0) + 1
+                    else:  # sana
+                        palta.votos_sana = (palta.votos_sana or 0) + 1
 
                     vn = palta.votos_no_palta or 0
                     vs = palta.votos_sana or 0
                     va = palta.votos_antracnosis or 0
-                    # gana la mayoría (empate -> prioridad antracnosis > sana > no_palta)
+                    vk = palta.votos_scab or 0
+                    # gana la mayoría; empate -> prioridad antracnosis > scab > sana
+                    # > no_es_palta (favorece cazar enfermas). max() toma el 1º en empate.
                     ganador = max(
-                        [("antracnosis", va), ("sana", vs), ("no_es_palta", vn)],
+                        [("antracnosis", va), ("scab", vk), ("sana", vs), ("no_es_palta", vn)],
                         key=lambda t: t[1],
                     )
                     palta.clasificacion = ganador[0]
-                    total = vn + vs + va
+                    total = vn + vs + va + vk
                     palta.confianza = round(ganador[1] / total, 4) if total else pred["confianza"]
+                    # también: confianza del gate y probs de enfermedad (de esta foto)
+                    palta.confianza_gate = pred.get("confianza_gate")
+                    if pred.get("probabilidades_enfermedad") is not None:
+                        palta.probabilidades = pred["probabilidades_enfermedad"]
                 db.commit()
         except Exception:
             db.rollback()
 
+    # clasificacion TOP-LEVEL = veredicto de ESTA foto (el firmware lo lee para
+    # decidir la expulsión de 'no_es_palta').
+    clasif_foto = pred["clasificacion"] if pred is not None else None
     return {"ok": True, "palta_id": palta_id, "foto_ruta": ruta_rel,
-            "bytes": len(img), "prediccion": pred}
+            "bytes": len(img), "clasificacion": clasif_foto, "prediccion": pred}
 
 
 @app.get("/api/palta/{palta_id}/fotos")
