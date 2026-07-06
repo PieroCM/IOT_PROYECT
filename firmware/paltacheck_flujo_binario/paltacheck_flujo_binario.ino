@@ -1,16 +1,24 @@
 /* ============================================================================
-   PaltaCheck — FLUJO BINARIO (PALTA / NO-PALTA) + SERVO   (ESP32-S3 N16R8)
+   PaltaCheck — FLUJO 3 CLASES (sana/antracnosis/scab) + SERVO   (ESP32-S3 N16R8)
    ----------------------------------------------------------------------------
-   El MODELO BINARIO corre en el BACKEND. El ESP32 manda la foto y LEE el
-   veredicto que devuelve /api/captura/foto, y con eso decide la compuerta:
-       no_es_palta   -> SERVO ABRE (rechaza / EXPULSA)
-       palta (sana)  -> compuerta cerrada, la deja pasar
+   El MODELO corre en el BACKEND (gate palta/no_palta + enfermedad). El ESP32
+   manda 3 fotos por fruta y el backend VOTA; luego lee el veredicto AGREGADO
+   (campo clasificacion_agregada) y decide la compuerta:
+       sana        -> PASA (compuerta cerrada, solo rodillos hacia adelante)
+       antracnosis -> EXPULSA (enferma)
+       scab        -> EXPULSA (enferma)
+       no_es_palta -> EXPULSA (no es palta)
+       (sin respuesta de red -> NO expulsa, la deja pasar y loguea)
    Flujo (mientras haya lote activo):
-     1) Cinta avanza HASTA que el IR detecta la fruta -> para -> 3 s.
-     2) RODILLOS x3: giran -> 5 s -> FOTO ACTUAL -> backend clasifica -> 5 s.
-     3) Según el veredicto: si NO es palta abre servo y EXPULSA; si es palta pasa.
-     4) Expulsa al MAXIMO y (si abrió) cierra la compuerta.
-     5) Si se cierra el lote, frena todo.
+     1) Cinta avanza HASTA que el IR detecta la fruta (LOW, con debounce).
+     2) Al detectar, la cinta sigue 5 s MÁS (cae a rodillos) y RECIÉN para.
+     3) Espera 2 s con la fruta en los rodillos.
+     4) 3 rondas: gira rodillos 4 s -> para -> ~0.5 s estabiliza -> foto fresca ->
+        el GATE decide: si ES palta toma sensores (TCS/DHT) y corre enfermedad;
+        si NO es palta, OMITE sensores+enfermedad (eficiencia, no promediable).
+     5) Decide con el veredicto AGREGADO: EXPULSA (servo 90° 10 s + rodillos 5 s)
+        si no_es_palta/antracnosis/scab; PASA si sana; sin respuesta -> deja pasar.
+     6) Si se cierra el lote, frena todo.
    Requiere ESP32Servo. Servo en GPIO 3 (5 V aparte + GND común).
    El backend debe estar reconstruido con el modelo:  docker compose up -d --build backend
    ============================================================================ */
@@ -78,15 +86,16 @@ const bool EXPULSION_NORMAL         = false;
 const int dutyArranque              = 200;
 const int dutyLento                 = 120;
 const int tiempoArranqueMs          = 200;
-const unsigned long tiempoGiroRodillos = 3000;
-const unsigned long tiempoEsperaFoto    = 5000;
-const unsigned long tiempoEntreVueltas  = 5000;
+// ─── TIEMPOS del flujo (todos aquí arriba, fáciles de tunear) ───────────────
+const unsigned long tiempoCintaExtra    = 5000;  // tras detectar IR, la cinta sigue 5 s y RECIÉN para
+const unsigned long tiempoEnRodillos    = 2000;  // 2 s con la fruta ya en los rodillos
+const unsigned long tiempoGiroRodillos  = 4000;  // gira ambos rodillos 4 s por ronda
+const unsigned long tiempoEstabilizacion = 500;  // ~0.5 s quieto antes de la foto (sin motion blur)
 const unsigned long tiempoServoArriba   = 10000; // 10 s con la compuerta levantada (90°)
 const unsigned long tiempoExpulsion     = 5000;  // 5 s de rodillos de expulsión con fuerza
-const int cantidadVueltas               = 3;
+const int cantidadVueltas               = 3;     // 3 fotos por fruta (el backend vota)
 const int IR_DEBOUNCE_MS        = 60;
 const unsigned long IR_RELEASE_TIMEOUT = 10000;
-const unsigned long tiempoPasoARodillos = 3000;
 // ─── Sensores ───────────────────────────────────────────────────────────────
 DHT dht(PIN_DHT22, DHT22);
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
@@ -177,10 +186,13 @@ bool cintaHastaDetectar() {
     if (digitalRead(PIN_IR) == LOW) {
       delay(IR_DEBOUNCE_MS);
       if (digitalRead(PIN_IR) == LOW) {
+        // NO paramos aún: la cinta AVANZA 5 s más para que la fruta caiga a los
+        // rodillos, y RECIÉN ahí se detiene.
+        Serial.printf("[IR] fruta detectada -> la cinta sigue %lu ms y para\n", tiempoCintaExtra);
+        bool ok = dormirVigilando(tiempoCintaExtra);   // la cinta sigue moviéndose
         detenerCinta();
-        Serial.println("[IR] fruta detectada -> cinta PARA");
-        Serial.println("[...] 3 s para que la fruta pase a los rodillos");
-        return dormirVigilando(tiempoPasoARodillos);
+        if (ok) Serial.println("[CINTA] detenida (fruta en los rodillos)");
+        return ok;
       }
     }
     if (millis() - lastPoll > POLL_LOTE_MS) {
@@ -201,56 +213,77 @@ void abortarPorLoteCerrado() {
   detenerTodo();
   Serial.println("[!] Lote cerrado -> FRENO todo\n");
 }
-// ── Procesa la fruta: rodillos x3 + foto -> el MODELO decide -> servo/bote ───
+// ── Procesa la fruta: 2 s en rodillos + 3 rondas. En cada ronda: foto -> el GATE
+//    decide; si ES palta toma sensores (+ el backend corre enfermedad), si NO es
+//    palta se OMITE (eficiencia, no promediable). Decide con el veredicto AGREGADO ─
 void procesarPalta() {
-  Serial.println("\n=== Procesando fruta (el modelo binario decide) ===");
-  String ultimoVeredicto = "";   // veredicto AGREGADO (mayoría de las 3 fotos)
-  int   paltaId = -1;            // UNA sola palta por fruta; las 3 fotos van a ella
+  Serial.println("\n=== Procesando fruta (3 fotos, el backend vota) ===");
+  // (3) Espera con la fruta ya en los rodillos antes de empezar a girar.
+  Serial.printf("[...] %lu ms con la fruta en los rodillos\n", tiempoEnRodillos);
+  if (!dormirVigilando(tiempoEnRodillos)) { abortarPorLoteCerrado(); return; }
+
+  String veredicto = "";        // veredicto AGREGADO (lo calcula el backend votando)
+  int    paltaId   = -1;        // UNA palta por fruta; las 3 fotos van a la MISMA
   for (int i = 1; i <= cantidadVueltas; i++) {
-    Serial.printf("\n[Vuelta %d/%d] girando (ambos rodillos)\n", i, cantidadVueltas);
+    // (4a) gira ambos rodillos y detiene
+    Serial.printf("\n[Ronda %d/%d] girando rodillos %lu ms\n", i, cantidadVueltas, tiempoGiroRodillos);
     if (!girarPaltaEnRodillos(tiempoGiroRodillos)) { abortarPorLoteCerrado(); return; }
-    detenerRodillos();
-    Serial.println("  espera 5 s, luego foto");
-    if (!dormirVigilando(tiempoEsperaFoto)) { abortarPorLoteCerrado(); return; }
-    int r=-1, g=-1, b=-1; float lux=NAN, t=NAN, h=NAN;
-    if (tcsOK) {
-      uint16_t R,G,B,C; tcs.getRawData(&R,&G,&B,&C);
-      lux = tcs.calculateLux(R,G,B); r=map8(R,C); g=map8(G,C); b=map8(B,C);
-      Serial.printf("  [TCS] R=%u G=%u B=%u Lux=%.1f\n", R,G,B,lux);
-    }
-    t = dht.readTemperature(); h = dht.readHumidity();
-    if (!isnan(t) && !isnan(h)) Serial.printf("  [DHT] T=%.1fC HR=%.1f%%\n", t, h);
+    // (4b) pausa de estabilización (foto sin movimiento)
+    if (!dormirVigilando(tiempoEstabilizacion)) { abortarPorLoteCerrado(); return; }
+    // (4c) captura foto fresca
     camera_fb_t* fb = capturarFresca();
-    if (fb) Serial.printf("  [CAM] foto %u bytes (%dx%d)\n", fb->len, fb->width, fb->height);
-    else    Serial.println("  [CAM] ERROR: sin frame");
-    if (paltaId < 0) paltaId = enviarPalta(r,g,b,lux,t,h);  // crea la palta UNA vez
-    if (fb) {
-      String v = enviarFoto(fb, paltaId);              // sube esta foto a la MISMA palta
-      if (v.length()) ultimoVeredicto = v;             // veredicto agregado por votos
-      esp_camera_fb_return(fb);
-    }
-    if (i < cantidadVueltas) {
-      Serial.println("  espera 5 s para volver a girar");
-      if (!dormirVigilando(tiempoEntreVueltas)) { abortarPorLoteCerrado(); return; }
+    if (!fb) { Serial.println("  [CAM] ERROR: sin frame -> salto ronda"); continue; }
+    Serial.printf("  [CAM] foto %u bytes (%dx%d)\n", fb->len, fb->width, fb->height);
+    // (4d) crea la palta la 1a vez (SIN sensores: aún no sabemos si es palta)
+    if (paltaId < 0) paltaId = enviarPalta();
+    // (4e) sube SOLO la foto -> el GATE decide. Devuelve el veredicto de ESTA foto
+    //      y (por referencia) el AGREGADO.
+    String agregada = "";
+    String perfoto = enviarFoto(fb, paltaId, agregada);
+    esp_camera_fb_return(fb);
+    if (agregada.length()) veredicto = agregada;
+    // (4f) SOLO si el gate confirma que ES palta: toma sensores (el backend además
+    //      corre el modelo de enfermedad). Si NO es palta -> se OMITE todo.
+    bool esPaltaRonda = (perfoto.length() && perfoto != "no_es_palta");
+    if (esPaltaRonda) {
+      int r=-1, g=-1, b=-1; float lux=NAN, t=NAN, h=NAN;
+      if (tcsOK) {
+        uint16_t R,G,B,C; tcs.getRawData(&R,&G,&B,&C);
+        lux = tcs.calculateLux(R,G,B); r=map8(R,C); g=map8(G,C); b=map8(B,C);
+        Serial.printf("  [TCS] R=%u G=%u B=%u Lux=%.1f\n", R,G,B,lux);
+      }
+      t = dht.readTemperature(); h = dht.readHumidity();
+      if (!isnan(t) && !isnan(h)) Serial.printf("  [DHT] T=%.1fC HR=%.1f%%\n", t, h);
+      enviarSensores(paltaId, r,g,b,lux,t,h);
+    } else {
+      Serial.printf("  [GATE] foto='%s' -> NO es palta: OMITO sensores y enfermedad\n",
+                    perfoto.length() ? perfoto.c_str() : "sin respuesta");
     }
   }
   if (!loteActivo) { abortarPorLoteCerrado(); return; }
-  // DECISIÓN según el modelo BINARIO (veredicto agregado de las 3 fotos)
-  // RECHAZA (abre servo y EXPULSA) si NO es palta; si es palta, la deja pasar.
-  bool rechazar = (ultimoVeredicto == "no_es_palta");
-  Serial.printf("\n[MODELO] veredicto = %s\n", ultimoVeredicto.length() ? ultimoVeredicto.c_str() : "(sin respuesta)");
-  if (rechazar) {
-    // NO ES PALTA: levanta la compuerta 90° por 10 s, luego expulsa 5 s con fuerza
-    Serial.println("[SERVO] NO ES PALTA -> levanta compuerta 90 por 10 s y EXPULSA");
+
+  // ── DECISIÓN con el veredicto AGREGADO (voto de las fotos) ──────────────────
+  // EXPULSA si es no_es_palta / antracnosis / scab. PASA solo si es 'sana'.
+  // Sin respuesta (veredicto vacío) -> NO expulsar (no rechazar fruta buena por red).
+  bool noPalta  = (veredicto == "no_es_palta");
+  bool enferma  = (veredicto == "antracnosis" || veredicto == "scab");
+  bool expulsar = (noPalta || enferma);
+  Serial.printf("\n[MODELO] veredicto agregado = %s\n",
+                veredicto.length() ? veredicto.c_str() : "(sin respuesta)");
+
+  if (expulsar) {
+    Serial.printf("[EXPULSA] %s -> compuerta 90 por %lu s + rodillos de expulsion %lu s\n",
+                  noPalta ? "NO ES PALTA" : veredicto.c_str(),
+                  tiempoServoArriba / 1000, tiempoExpulsion / 1000);
     moverCompuerta(ANGULO_COMPUERTA);
     if (!dormirVigilando(tiempoServoArriba)) { abortarPorLoteCerrado(); return; }
-    Serial.println("[Botar] rodillos de expulsion 5 s con fuerza");
     if (!botarPalta(tiempoExpulsion)) { abortarPorLoteCerrado(); return; }
     detenerTodo();
     moverCompuerta(0);   // baja la compuerta para la siguiente
   } else {
-    // ES PALTA: la deja pasar (sin servo)
-    Serial.println("[OK] PALTA -> la deja pasar (expulsa sin servo)");
+    // 'sana' o sin respuesta -> PASA (solo rodillos hacia adelante, sin servo)
+    Serial.println(veredicto.length() ? "[PASA] SANA -> la deja pasar (sin servo)"
+                                       : "[PASA] sin veredicto -> la deja pasar (no rechazo por red)");
     if (!botarPalta(tiempoExpulsion)) { abortarPorLoteCerrado(); return; }
     detenerTodo();
   }
@@ -352,26 +385,20 @@ void consultarLoteActivo() {
   }
   http.end();
 }
-// POST /api/palta. clasificacion = null: la decide el MODELO en el backend.
-int enviarPalta(int r, int g, int b, float lux, float t, float hr) {
+// POST /api/palta -> crea la palta (SIN sensores: aún no sabemos si es palta; los
+// sensores se mandan luego con enviarSensores SOLO si el gate confirma que es palta).
+// clasificacion = null: la decide el MODELO en el backend con las fotos.
+int enviarPalta() {
   if (WiFi.status() != WL_CONNECTED) return -1;
   HTTPClient http;
   String url = String("http://") + BACKEND_HOST + ":" + BACKEND_PORT + "/api/palta";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  char rS[8],gS[8],bS[8],luxS[16],tS[16],hrS[16];
-  if (r < 0) strcpy(rS, "null"); else snprintf(rS, sizeof(rS), "%d", r);
-  if (g < 0) strcpy(gS, "null"); else snprintf(gS, sizeof(gS), "%d", g);
-  if (b < 0) strcpy(bS, "null"); else snprintf(bS, sizeof(bS), "%d", b);
-  if (isnan(lux)) strcpy(luxS, "null"); else snprintf(luxS, sizeof(luxS), "%.1f", lux);
-  if (isnan(t))   strcpy(tS, "null");   else snprintf(tS, sizeof(tS), "%.1f", t);
-  if (isnan(hr))  strcpy(hrS, "null");  else snprintf(hrS, sizeof(hrS), "%.1f", hr);
-  char body[300];
+  char body[160];
   snprintf(body, sizeof(body),
     "{\"lote_id\":%d,\"clasificacion\":null,\"confianza\":null,"
-    "\"r\":%s,\"g\":%s,\"b\":%s,\"lux\":%s,"
-    "\"temp\":%s,\"humedad\":%s,\"ir_detectado\":true,\"lecturas\":%d}",
-    loteId, rS,gS,bS,luxS, tS,hrS, cantidadVueltas);
+    "\"ir_detectado\":true,\"lecturas\":%d}",
+    loteId, cantidadVueltas);
   int paltaId = -1;
   int code = http.POST((uint8_t*)body, strlen(body));
   if (code == 200) {
@@ -385,10 +412,12 @@ int enviarPalta(int r, int g, int b, float lux, float t, float hr) {
   http.end();
   return paltaId;
 }
-// POST /api/captura/foto -> devuelve el veredicto del modelo (palta / no_es_palta)
-String enviarFoto(camera_fb_t* fb, int paltaId) {
-  String veredicto = "";
-  if (!fb || WiFi.status() != WL_CONNECTED) return veredicto;
+// POST /api/captura/foto -> sube SOLO la foto. DEVUELVE el veredicto de ESTA foto
+// (per-foto, para el gate de la ronda) y por REFERENCIA el AGREGADO (voto).
+String enviarFoto(camera_fb_t* fb, int paltaId, String& agregadaOut) {
+  String perfoto = "";
+  agregadaOut = "";
+  if (!fb || WiFi.status() != WL_CONNECTED) return perfoto;
   HTTPClient http;
   String url = String("http://") + BACKEND_HOST + ":" + BACKEND_PORT +
                "/api/captura/foto?palta_id=" + paltaId + "&lote_id=" + loteId;
@@ -397,19 +426,44 @@ String enviarFoto(camera_fb_t* fb, int paltaId) {
   int code = http.POST(fb->buf, fb->len);
   if (code == 200) {
     String resp = http.getString();
+    // veredicto de ESTA foto (decide si tomamos sensores en la ronda)
     int i = resp.indexOf("\"clasificacion\":\"");
-    if (i >= 0) {
-      int s = i + 17;                       // largo de  "clasificacion":"
-      int e = resp.indexOf("\"", s);
-      if (e > s) veredicto = resp.substring(s, e);
-    }
-    Serial.printf("  [NET] POST foto OK (%u bytes) veredicto=%s\n",
-                  fb->len, veredicto.length() ? veredicto.c_str() : "?");
+    if (i >= 0) { int s = i + 17; int e = resp.indexOf("\"", s); if (e > s) perfoto = resp.substring(s, e); }
+    // veredicto AGREGADO (voto de las fotos) -> decisión final tras la 3a
+    int j = resp.indexOf("\"clasificacion_agregada\":\"");
+    if (j >= 0) { int s = j + 26; int e = resp.indexOf("\"", s); if (e > s) agregadaOut = resp.substring(s, e); }
+    Serial.printf("  [NET] POST foto OK (%u bytes) foto=%s agregado=%s\n",
+                  fb->len, perfoto.length() ? perfoto.c_str() : "?",
+                  agregadaOut.length() ? agregadaOut.c_str() : "?");
   } else {
     Serial.printf("  [NET] POST foto HTTP %d\n", code);
   }
   http.end();
-  return veredicto;
+  return perfoto;
+}
+// POST /api/palta/{id}/sensores -> manda las lecturas de la ronda. Se llama SOLO
+// cuando el gate confirmó que es palta (los frames no_es_palta no mandan sensores).
+void enviarSensores(int paltaId, int r, int g, int b, float lux, float t, float hr) {
+  if (WiFi.status() != WL_CONNECTED || paltaId < 0) return;
+  HTTPClient http;
+  String url = String("http://") + BACKEND_HOST + ":" + BACKEND_PORT +
+               "/api/palta/" + paltaId + "/sensores";
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  char rS[8],gS[8],bS[8],luxS[16],tS[16],hrS[16];
+  if (r < 0) strcpy(rS, "null"); else snprintf(rS, sizeof(rS), "%d", r);
+  if (g < 0) strcpy(gS, "null"); else snprintf(gS, sizeof(gS), "%d", g);
+  if (b < 0) strcpy(bS, "null"); else snprintf(bS, sizeof(bS), "%d", b);
+  if (isnan(lux)) strcpy(luxS, "null"); else snprintf(luxS, sizeof(luxS), "%.1f", lux);
+  if (isnan(t))   strcpy(tS, "null");   else snprintf(tS, sizeof(tS), "%.1f", t);
+  if (isnan(hr))  strcpy(hrS, "null");  else snprintf(hrS, sizeof(hrS), "%.1f", hr);
+  char body[200];
+  snprintf(body, sizeof(body),
+    "{\"r\":%s,\"g\":%s,\"b\":%s,\"lux\":%s,\"temp\":%s,\"humedad\":%s}",
+    rS,gS,bS,luxS,tS,hrS);
+  int code = http.POST((uint8_t*)body, strlen(body));
+  Serial.printf("  [NET] POST sensores palta %d HTTP %d\n", paltaId, code);
+  http.end();
 }
 // ════════════════════════════════════════════════════════════════════════════
 //  WiFi + Cámara

@@ -56,10 +56,16 @@
           <h3 class="card-title">Última fruta</h3>
 
           <template v-if="ultima">
-            <!-- Foto -->
+            <!-- Foto (la más reciente) + miniaturas de las fotos del ciclo -->
             <div class="foto-wrap">
               <img v-if="fotoUrl" :src="fotoUrl" alt="Fruta" class="foto" />
               <div v-else class="foto-empty">📷 Sin imagen</div>
+            </div>
+            <div v-if="capturas.length" class="foto-thumbs">
+              <img v-for="(c, i) in capturas" :key="c.key" :src="c.url"
+                   class="foto-thumb" :class="{ 'foto-thumb--sel': i === capturas.length - 1 }"
+                   :title="'Foto ' + (i + 1)" :alt="'Foto ' + (i + 1)" />
+              <span class="foto-thumbs-lbl">Fotos del ciclo ({{ capturas.length }})</span>
             </div>
 
             <!-- Veredicto grande -->
@@ -314,6 +320,10 @@ async function cerrarLote() {
 .foto-wrap { margin:10px 18px 0; border-radius:10px; overflow:hidden; background:#20242a; border:1px solid var(--borde-cards); }
 .foto { display:block; width:100%; height:240px; object-fit:contain; background:#20242a; }
 .foto-empty { height:240px; display:flex; align-items:center; justify-content:center; color:var(--texto-secondary); }
+.foto-thumbs { display:flex; align-items:center; gap:8px; padding:10px 18px 0; flex-wrap:wrap; }
+.foto-thumb { width:60px; height:60px; object-fit:contain; background:#20242a; border-radius:8px; border:1px solid var(--borde-cards); }
+.foto-thumb--sel { border-color:var(--pasa); box-shadow:0 0 0 2px rgba(92,184,92,.35); }
+.foto-thumbs-lbl { font-size:.72rem; color:var(--texto-secondary); }
 
 .verdict { margin:14px 18px 0; border-radius:12px; padding:16px 20px; display:flex; align-items:center; gap:16px; }
 .verdict-ico { font-size:2.4rem; line-height:1; }

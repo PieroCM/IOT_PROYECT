@@ -58,6 +58,17 @@ class PaltaPayload(BaseModel):
     lecturas:          Optional[int]   = 3
 
 
+class SensoresPayload(BaseModel):
+    """Lecturas de sensores de UNA ronda. El ESP32 las envía SOLO cuando el gate
+    confirmó que es palta (los frames 'no_es_palta' no mandan sensores)."""
+    r:       Optional[int]   = None
+    g:       Optional[int]   = None
+    b:       Optional[int]   = None
+    lux:     Optional[float] = None
+    temp:    Optional[float] = None
+    humedad: Optional[float] = None
+
+
 # ─── Health ──────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -315,7 +326,9 @@ async def recibir_foto(
     carpeta = CAPTURAS_DIR / f"lote_{lote_id or 0}"
     carpeta.mkdir(parents=True, exist_ok=True)
 
-    sello = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # microsegundos en el nombre: evita que 2 fotos del mismo segundo se pisen y
+    # da una URL ÚNICA por foto (el navegador ya no sirve una vieja cacheada).
+    sello = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     nombre = f"palta_{palta_id or 'x'}_{sello}.jpg"
     ruta = carpeta / nombre
     ruta.write_bytes(img)
@@ -334,6 +347,7 @@ async def recibir_foto(
         print(f"[ML] inferencia no disponible: {e}")
 
     # Guardar la referencia (no el blob) + el veredicto del modelo en la palta.
+    clasif_agregada = None   # veredicto AGREGADO (voto de las fotos) para el firmware
     if db is not None and palta_id is not None:
         try:
             from models import Palta
@@ -372,14 +386,46 @@ async def recibir_foto(
                     if pred.get("probabilidades_enfermedad") is not None:
                         palta.probabilidades = pred["probabilidades_enfermedad"]
                 db.commit()
+                clasif_agregada = palta.clasificacion   # veredicto votado tras esta foto
         except Exception:
             db.rollback()
 
-    # clasificacion TOP-LEVEL = veredicto de ESTA foto (el firmware lo lee para
-    # decidir la expulsión de 'no_es_palta').
+    # clasificacion          = veredicto de ESTA foto (compat).
+    # clasificacion_agregada = veredicto VOTADO de la palta -> lo lee el firmware
+    #                          tras la 3a foto para decidir la compuerta.
     clasif_foto = pred["clasificacion"] if pred is not None else None
     return {"ok": True, "palta_id": palta_id, "foto_ruta": ruta_rel,
-            "bytes": len(img), "clasificacion": clasif_foto, "prediccion": pred}
+            "bytes": len(img), "clasificacion": clasif_foto,
+            "clasificacion_agregada": clasif_agregada if clasif_agregada is not None else clasif_foto,
+            "prediccion": pred}
+
+
+@app.post("/api/palta/{palta_id}/sensores")
+def actualizar_sensores(palta_id: int, payload: SensoresPayload, db: Any = Depends(get_db)):
+    """Actualiza las lecturas de sensores de una palta. El ESP32 llama aquí SOLO
+    en las rondas en que el gate confirmó que ES palta (eficiencia: los frames
+    'no_es_palta' no toman ni promedian sensores). Refresca la última SensorData."""
+    if db is None:
+        return {"ok": True, "sin_bd": True}
+    try:
+        from models import SensorData
+        sd = db.query(SensorData).filter(
+            SensorData.palta_id == palta_id
+        ).order_by(SensorData.timestamp.desc()).first()
+        if sd is None:
+            sd = SensorData(palta_id=palta_id)
+            db.add(sd)
+        if payload.r is not None:       sd.r = payload.r
+        if payload.g is not None:       sd.g = payload.g
+        if payload.b is not None:       sd.b = payload.b
+        if payload.lux is not None:     sd.lux = payload.lux
+        if payload.temp is not None:    sd.temp = payload.temp
+        if payload.humedad is not None: sd.humedad = payload.humedad
+        db.commit()
+        return {"ok": True, "palta_id": palta_id}
+    except Exception as e:
+        db.rollback()
+        return {"ok": False, "error": str(e)}
 
 
 @app.get("/api/palta/{palta_id}/fotos")
