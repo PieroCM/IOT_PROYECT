@@ -28,6 +28,7 @@ services:
       # Cadena de inferencia: gate Keras (palta/no_palta) + enfermedad ONNX (3 clases)
       DISEASE_ENABLED:     ${DISEASE_ENABLED:-true}
       BINARY_MODEL_PATH:   /app/models/best_model.keras
+      BINARY_CLASSES_PATH: /app/models/best_model_classes.json
       DISEASE_MODEL_PATH:  /app/models/modelo_antracnosis.onnx
       DISEASE_CLASSES_PATH: /app/models/modelo_antracnosis_classes.json
     volumes:

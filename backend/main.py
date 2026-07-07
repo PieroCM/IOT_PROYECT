@@ -8,6 +8,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from typing import Optional, Any
 from datetime import datetime, timezone, timedelta
 from database import get_db, init_db
@@ -94,6 +95,9 @@ def listar_lotes(db: Any = Depends(get_db)):
         rechazo = db.query(sqlfunc.count(Palta.id)).filter(
             Palta.lote_id == l.id, Palta.clasificacion.in_(['antracnosis', 'scab'])
         ).scalar() or 0
+        no_palta = db.query(sqlfunc.count(Palta.id)).filter(
+            Palta.lote_id == l.id, Palta.clasificacion == 'no_es_palta'
+        ).scalar() or 0
         temp_prom = db.query(sqlfunc.avg(SensorData.temp)).join(
             Palta, SensorData.palta_id == Palta.id
         ).filter(Palta.lote_id == l.id).scalar()
@@ -111,6 +115,7 @@ def listar_lotes(db: Any = Depends(get_db)):
             "total":              total,
             "sanas":              sanas,
             "rechazadas":         rechazo,
+            "no_palta":           no_palta,
             "temp_promedio":      round(float(temp_prom), 2) if temp_prom else None,
             "humedad_promedio":   round(float(hum_prom), 2)  if hum_prom  else None,
             "confianza_promedio": round(float(conf_prom) * 100, 2) if conf_prom else None,
@@ -146,6 +151,15 @@ def lote_activo(db: Any = Depends(get_db)):
 def crear_lote(body: LoteCreate, db: Any = Depends(get_db)):
     if db is not None:
         from models import Lote
+        codigo = body.codigo.strip()
+        if not codigo:
+            raise HTTPException(status_code=400, detail="Ingresa un codigo de lote.")
+        existente = db.query(Lote).filter(Lote.codigo == codigo).first()
+        if existente is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Ya existe un lote con el codigo '{codigo}'. Usa un codigo nuevo.",
+            )
         # Cierra cualquier lote que haya quedado ABIERTO (remanente) antes de
         # crear el nuevo: así nunca hay dos lotes activos a la vez y el ESP32
         # (que pollea /api/lote/activo) siempre apunta a uno solo.
@@ -183,7 +197,7 @@ def get_kpis(lote_id: int, db: Any = Depends(get_db)):
     vista_kpis_lote, que puede no existir si el volumen de la BD es viejo)."""
     base = {
         "lote_id": lote_id, "codigo": None, "inicio": None, "fin": None,
-        "total": 0, "sanas": 0, "rechazadas": 0, "tasa_rechazo": 0.0,
+        "total": 0, "sanas": 0, "rechazadas": 0, "no_palta": 0, "tasa_rechazo": 0.0,
         "confianza_promedio": None, "temp_promedio": None, "humedad_promedio": None,
     }
     if db is None:
@@ -199,6 +213,9 @@ def get_kpis(lote_id: int, db: Any = Depends(get_db)):
     ).scalar() or 0
     rechazadas = db.query(sqlfunc.count(Palta.id)).filter(
         Palta.lote_id == lote_id, Palta.clasificacion.in_(['antracnosis', 'scab'])
+    ).scalar() or 0
+    no_palta = db.query(sqlfunc.count(Palta.id)).filter(
+        Palta.lote_id == lote_id, Palta.clasificacion == 'no_es_palta'
     ).scalar() or 0
     conf = db.query(sqlfunc.avg(Palta.confianza)).filter(Palta.lote_id == lote_id).scalar()
     temp = db.query(sqlfunc.avg(SensorData.temp)).join(
@@ -216,6 +233,7 @@ def get_kpis(lote_id: int, db: Any = Depends(get_db)):
         "total":              total,
         "sanas":              sanas,
         "rechazadas":         rechazadas,
+        "no_palta":           no_palta,
         "tasa_rechazo":       round(rechazadas / total * 100, 2) if total else 0.0,
         "confianza_promedio": round(float(conf), 4) if conf is not None else None,
         "temp_promedio":      round(float(temp), 2) if temp is not None else None,
@@ -272,9 +290,13 @@ def recibir_palta(payload: PaltaPayload, db: Any = Depends(get_db)):
     # backend sobre cada foto). Aquí solo creamos la cabecera de la palta con lo
     # que mande el ESP32 (normalmente clasificacion=null hasta que llega la
     # primera foto); NO inventamos 'sana'/0.5.
+    clasificacion = payload.clasificacion
+    if clasificacion == "no_palta":
+        clasificacion = "no_es_palta"
+
     palta = Palta(
         lote_id=payload.lote_id,
-        clasificacion=payload.clasificacion,   # puede ser None; se llena con la foto
+        clasificacion=clasificacion,   # puede ser None; se llena con la foto
         confianza=payload.confianza,
         votos_sana=payload.votos_sana or 0,
         votos_antracnosis=payload.votos_antracnosis or 0,

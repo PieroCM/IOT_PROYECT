@@ -1,43 +1,63 @@
 <template>
   <div class="app-shell">
-    <!-- Hamburguesa (solo móvil / táctil) -->
-    <button class="hamburger" @click="sidebarOpen = !sidebarOpen" aria-label="Menú">
-      <span></span><span></span><span></span>
+    <button
+      class="mobile-menu-toggle"
+      :class="{ 'mobile-menu-toggle--hidden': sidebarOpen }"
+      @click="sidebarOpen = true"
+      aria-label="Abrir menu"
+      title="Abrir menu"
+    >
+      <PanelLeft :size="21" :stroke-width="1.8" />
     </button>
-    <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false" />
+    <div v-if="sidebarOpen" class="sidebar-overlay" @click="cerrarSidebarMovil" />
 
-    <!-- Zona de hover: acerca el mouse al borde izquierdo y el menú se abre solo -->
-    <div class="edge-hover" aria-hidden="true"><span class="edge-hint">☰</span></div>
-
-    <!-- Sidebar (oculto; se muestra al hacer hover en el borde o con la hamburguesa) -->
     <aside class="sidebar" :class="{ 'sidebar--open': sidebarOpen }">
       <div class="sidebar-logo">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2C8 2 4 6 4 10c0 5 8 12 8 12s8-7 8-12c0-4-4-8-8-8z"/>
-        </svg>
+        <button
+          class="sidebar-toggle"
+          @click="sidebarOpen = !sidebarOpen"
+          :aria-label="sidebarOpen ? 'Cerrar menu' : 'Abrir menu'"
+          :title="sidebarOpen ? 'Cerrar menu' : 'Abrir menu'"
+        >
+          <Sprout class="brand-icon" :size="21" :stroke-width="2" />
+          <PanelLeft class="panel-icon" :size="21" :stroke-width="1.8" />
+        </button>
         <span>PaltaCheck</span>
       </div>
 
       <nav class="sidebar-nav">
-        <RouterLink to="/" @click="sidebarOpen = false" :class="{ active: $route.path === '/' }">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            <polyline points="9 22 9 12 15 12 15 22"/>
-          </svg>
-          Lote Activo
+        <RouterLink to="/" @click="cerrarSidebarMovil" :class="{ active: $route.path === '/' }">
+          <House :size="18" :stroke-width="2" />
+          <span>Lote Activo</span>
         </RouterLink>
-        <RouterLink to="/historial" @click="sidebarOpen = false" :class="{ active: $route.path === '/historial' }">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
-            <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
-            <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-          </svg>
-          Historial
+        <RouterLink to="/historial" @click="cerrarSidebarMovil" :class="{ active: $route.path === '/historial' }">
+          <History :size="18" :stroke-width="2" />
+          <span>Historial</span>
         </RouterLink>
       </nav>
 
       <div class="sidebar-status">
-        <div class="esp32-badge">
+        <button
+          class="theme-switch"
+          role="switch"
+          :aria-checked="theme === 'dark'"
+          @click="toggleTheme"
+          :title="theme === 'dark' ? 'Tema claro' : 'Tema oscuro'"
+        >
+          <span class="switch-track">
+            <span class="switch-thumb">
+              <Sun v-if="theme === 'dark'" :size="13" />
+              <Moon v-else :size="13" />
+            </span>
+          </span>
+          <span class="switch-label">{{ theme === 'dark' ? 'Oscuro' : 'Claro' }}</span>
+        </button>
+        <div
+          class="esp32-badge"
+          :class="store.esp32Online ? 'esp32-badge--online' : 'esp32-badge--offline'"
+          :title="`ESP32 ${store.esp32Online ? 'Conectado' : 'Desconectado'}`"
+          :aria-label="`ESP32 ${store.esp32Online ? 'Conectado' : 'Desconectado'}`"
+        >
           <span class="dot-wrap">
             <span class="dot" :class="store.esp32Online ? 'dot--green' : 'dot--gray'" />
             <span v-if="store.esp32Online" class="dot ping-ring" style="position:absolute;top:0;left:0;" />
@@ -47,7 +67,6 @@
       </div>
     </aside>
 
-    <!-- Contenido principal (ocupa todo el ancho; el menú flota encima) -->
     <main class="main-content">
       <RouterView />
     </main>
@@ -56,14 +75,35 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { History, House, Moon, PanelLeft, Sprout, Sun } from '@lucide/vue'
 import { usePaltaStore } from './stores/palta'
 
 const store = usePaltaStore()
 const sidebarOpen = ref(false)
+const theme = ref('light')
 
 let healthInterval = null
 
+function cerrarSidebarMovil() {
+  if (window.matchMedia?.('(max-width: 768px)').matches) {
+    sidebarOpen.value = false
+  }
+}
+
+function setTheme(value) {
+  theme.value = value
+  document.documentElement.dataset.theme = value
+  localStorage.setItem('paltacheck-theme', value)
+}
+
+function toggleTheme() {
+  setTheme(theme.value === 'dark' ? 'light' : 'dark')
+}
+
 onMounted(async () => {
+  const savedTheme = localStorage.getItem('paltacheck-theme')
+  const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches
+  setTheme(savedTheme || (prefersDark ? 'dark' : 'light'))
   store.fetchHealth()
   await store.fetchLoteActivo()
   store.iniciarPolling()
@@ -81,100 +121,404 @@ onUnmounted(() => {
   display: flex;
   height: 100vh;
   overflow: hidden;
-  position: relative;
+  background: var(--fondo-pagina);
 }
 
-/* ── Zona de hover (borde izquierdo) ── */
-.edge-hover {
-  position: fixed;
-  left: 0; top: 0;
-  width: 16px; height: 100%;
-  z-index: 250;
-}
-.edge-hover::before {   /* franjita visible: pista de que hay un menú */
-  content: '';
-  position: absolute; left: 0; top: 0;
-  width: 5px; height: 100%;
-  background: linear-gradient(180deg, var(--verde-acento), var(--verde-primary));
-}
-.edge-hint {
-  position: absolute; top: 50%; left: 5px; transform: translateY(-50%);
-  color: #fff; background: var(--verde-primary);
-  border-radius: 0 8px 8px 0; padding: 10px 7px;
-  font-size: 1rem; line-height: 1;
-  box-shadow: 1px 1px 5px rgba(0,0,0,.25);
-  transition: opacity .2s;
-}
-
-/* ── Sidebar (oculto por defecto; slide-in al hover o hamburguesa) ── */
 .sidebar {
-  position: fixed;
-  left: 0; top: 0;
+  width: 64px;
   height: 100%;
-  width: 240px;
-  background: var(--verde-primary);
+  background: var(--sidebar-bg);
   color: #fff;
   display: flex;
   flex-direction: column;
-  z-index: 300;
-  transform: translateX(-100%);
-  transition: transform 0.25s ease;
-  box-shadow: 2px 0 18px rgba(0,0,0,0.2);
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.22s ease;
+  box-shadow: 1px 0 10px rgba(0,0,0,0.14);
+  z-index: 100;
 }
-/* Se abre al: acercar el mouse al borde, pasar sobre el propio menú, o hamburguesa */
-.edge-hover:hover ~ .sidebar,
-.sidebar:hover,
+
 .sidebar--open {
-  transform: translateX(0);
+  width: 240px;
 }
-/* Oculta la pista mientras el menú está abierto por hover */
-.edge-hover:hover .edge-hint { opacity: 0; }
 
 .sidebar-logo {
-  display: flex; align-items: center; gap: 10px;
-  padding: 24px 20px; font-size: 1.2rem; font-weight: 700;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 0 12px;
+  font-size: 1.2rem;
+  font-weight: 700;
   border-bottom: 1px solid rgba(255,255,255,0.1);
+  white-space: nowrap;
 }
-.sidebar-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+
+.sidebar:not(.sidebar--open) .sidebar-logo {
+  grid-template-columns: 40px;
+  justify-content: center;
+  justify-items: center;
+  padding: 0;
+}
+
+.sidebar:not(.sidebar--open) .sidebar-nav {
+  align-items: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.sidebar:not(.sidebar--open) .sidebar-nav a {
+  width: 40px;
+  height: 40px;
+  max-width: 40px;
+  max-height: 40px;
+  min-height: 40px;
+  flex: 0 0 40px;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sidebar:not(.sidebar--open) .sidebar-nav a span {
+  display: none;
+}
+
+.sidebar-logo span,
+.sidebar-nav a span,
+.esp32-badge > span:last-child {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.sidebar--open .sidebar-logo span,
+.sidebar--open .sidebar-nav a span,
+.sidebar--open .esp32-badge > span:last-child {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar-toggle {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.mobile-menu-toggle {
+  display: none;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.32);
+}
+
+.panel-icon {
+  display: none;
+}
+
+.sidebar-toggle:hover .brand-icon,
+.sidebar--open .sidebar-toggle .brand-icon {
+  display: none;
+}
+
+.sidebar-toggle:hover .panel-icon,
+.sidebar--open .sidebar-toggle .panel-icon {
+  display: block;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
 .sidebar-nav a {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px; border-radius: 8px;
-  color: rgba(255,255,255,0.8); text-decoration: none; font-size: 0.9rem;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 1px 0;
+  border-radius: 8px;
+  color: rgba(255,255,255,0.8);
+  text-decoration: none;
+  font-size: 0.9rem;
+  white-space: nowrap;
   transition: background 0.15s, color 0.15s;
 }
-.sidebar-nav a:hover, .sidebar-nav a.active { background: rgba(255,255,255,0.12); color: #fff; }
-.sidebar-status { padding: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
-.esp32-badge { display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: rgba(255,255,255,0.9); }
-.dot-wrap { position: relative; width: 10px; height: 10px; flex-shrink: 0; }
-.dot { display: block; width: 10px; height: 10px; border-radius: 50%; }
-.dot--green { background: var(--verde-acento); }
-.dot--gray  { background: var(--texto-secondary); }
 
-/* ── Main ── */
+.sidebar-nav a > svg {
+  justify-self: center;
+}
+
+.sidebar-nav a:hover,
+.sidebar-nav a.active {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+}
+
+.sidebar-status {
+  padding: 12px 12px 18px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.theme-switch {
+  min-height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255,255,255,0.9);
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 1px 0;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.theme-switch:hover {
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+}
+
+.sidebar:not(.sidebar--open) .theme-switch {
+  width: 40px;
+  min-height: 24px;
+  grid-template-columns: auto;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.sidebar:not(.sidebar--open) .theme-switch:hover {
+  background: transparent;
+}
+
+.switch-track {
+  width: 36px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.22);
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  transition: background .18s ease, border-color .18s ease;
+}
+
+.switch-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--sidebar-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(0);
+  transition: transform .18s ease;
+}
+
+.theme-switch[aria-checked="true"] .switch-track {
+  background: var(--verde-acento);
+  border-color: var(--verde-acento);
+}
+
+.theme-switch[aria-checked="true"] .switch-thumb {
+  transform: translateX(14px);
+}
+
+.switch-label {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.sidebar--open .switch-label {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.esp32-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.9);
+  white-space: nowrap;
+  padding: 0 10px;
+}
+
+.sidebar:not(.sidebar--open) .esp32-badge {
+  width: 40px;
+  height: 40px;
+  justify-content: center;
+  align-self: center;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+}
+
+.sidebar:not(.sidebar--open) .esp32-badge--online {
+  background:
+    radial-gradient(circle at center, var(--verde-acento) 0 7px, rgba(166,255,77,0.22) 8px 11px, transparent 12px),
+    rgba(255,255,255,0.06);
+  box-shadow: inset 0 0 0 1px rgba(166,255,77,0.14), 0 0 12px rgba(166,255,77,0.32);
+}
+
+.sidebar:not(.sidebar--open) .esp32-badge--offline {
+  background:
+    radial-gradient(circle at center, #d4dde0 0 7px, rgba(255,255,255,0.16) 8px 11px, transparent 12px),
+    rgba(255,255,255,0.06);
+}
+
+.sidebar:not(.sidebar--open) .esp32-badge::before {
+  content: none;
+}
+
+.sidebar:not(.sidebar--open) .esp32-badge:hover {
+  border-color: rgba(255,255,255,0.32);
+}
+
+.sidebar:not(.sidebar--open) .esp32-badge--online:hover {
+  background:
+    radial-gradient(circle at center, var(--verde-acento) 0 7px, rgba(166,255,77,0.28) 8px 11px, transparent 12px),
+    rgba(255,255,255,0.14);
+}
+
+.sidebar:not(.sidebar--open) .esp32-badge--offline:hover {
+  background:
+    radial-gradient(circle at center, #d4dde0 0 7px, rgba(255,255,255,0.22) 8px 11px, transparent 12px),
+    rgba(255,255,255,0.14);
+}
+
+.sidebar:not(.sidebar--open) .esp32-badge .dot-wrap {
+  display: none;
+}
+
+.dot-wrap {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+.dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.sidebar:not(.sidebar--open) .dot-wrap,
+.sidebar:not(.sidebar--open) .dot {
+  width: 16px;
+  height: 16px;
+}
+
+.dot--green {
+  background: var(--verde-acento);
+  box-shadow: 0 0 0 3px rgba(166,255,77,0.18), 0 0 12px rgba(166,255,77,0.65);
+}
+
+.dot--gray {
+  background: #d4dde0;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.12);
+}
+
 .main-content {
   flex: 1;
-  width: 100%;
+  min-width: 0;
   overflow: auto;
   background: var(--fondo-pagina);
   display: flex;
   flex-direction: column;
 }
 
-/* ── Hamburguesa (móvil) ── */
-.hamburger {
+.sidebar-overlay {
   display: none;
-  position: fixed; top: 14px; left: 14px; z-index: 320;
-  background: var(--verde-primary); border: none; border-radius: 6px;
-  padding: 8px 10px; flex-direction: column; gap: 5px;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 290;
 }
-.hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
-.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 290; }
 
-/* ── Responsive: en móvil no hay hover -> hamburguesa ── */
 @media (max-width: 768px) {
-  .edge-hover { display: none; }
-  .hamburger { display: flex; }
-  .sidebar-overlay { display: block; }
-  .main-content { padding-top: 52px; }
+  .app-shell {
+    display: block;
+  }
+
+  .mobile-menu-toggle {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 280;
+    width: 42px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: var(--verde-primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  }
+
+  .mobile-menu-toggle--hidden {
+    display: none;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 240px;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    z-index: 300;
+  }
+
+  .sidebar--open {
+    width: 240px;
+    transform: translateX(0);
+  }
+
+  .sidebar-logo span,
+  .sidebar-nav a span,
+  .esp32-badge > span:last-child {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar-overlay {
+    display: block;
+  }
+
+  .main-content {
+    height: 100vh;
+    padding-top: 52px;
+  }
 }
 </style>

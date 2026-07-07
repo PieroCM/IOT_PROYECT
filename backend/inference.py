@@ -24,6 +24,10 @@ BINARY_MODEL_PATH = os.getenv(
     "BINARY_MODEL_PATH",
     "/app/models/best_model.keras",
 )
+BINARY_CLASSES_PATH = os.getenv(
+    "BINARY_CLASSES_PATH",
+    "/app/models/best_model_classes.json",
+)
 # Etapa 2 ahora es ONNX (antes .keras malogrado).
 DISEASE_MODEL_PATH = os.getenv(
     "DISEASE_MODEL_PATH",
@@ -35,7 +39,18 @@ DISEASE_CLASSES_PATH = os.getenv(
 )
 
 # Orden de clases (índice -> etiqueta)
-BINARY_CLASS_NAMES = ["no_palta", "palta"]           # gate
+def _cargar_clases_binarias():
+    try:
+        with open(BINARY_CLASSES_PATH, "r", encoding="utf-8") as f:
+            clases = json.load(f)
+        if isinstance(clases, list) and {"no_palta", "palta"}.issubset(set(clases)):
+            return [str(c) for c in clases]
+    except Exception as e:
+        print(f"[ML] No pude leer clases binarias ({BINARY_CLASSES_PATH}): {e}")
+    return ["no_palta", "palta"]
+
+
+BINARY_CLASS_NAMES = _cargar_clases_binarias()
 
 # El ONNX emite logits en el orden en que se entrenó (alfabético). Se lee del
 # JSON como fuente de verdad; fallback al orden verificado del checkpoint.

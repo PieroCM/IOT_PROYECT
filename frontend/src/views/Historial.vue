@@ -35,15 +35,15 @@
     <!-- Summary cards -->
     <div class="summary-grid">
       <div class="card summary-card">
-        <p class="sum-label">Total Lotes Procesados</p>
+        <p class="sum-label">Lotes</p>
         <p class="sum-value">{{ store.historial.length }}</p>
       </div>
       <div class="card summary-card">
-        <p class="sum-label">Promedio Tasa Rechazo</p>
+        <p class="sum-label">Rechazo prom.</p>
         <p class="sum-value" style="color: var(--rojo-rechazo)">{{ promedioRechazo }}%</p>
       </div>
       <div class="card summary-card">
-        <p class="sum-label">Mejor Lote</p>
+        <p class="sum-label">Mejor</p>
         <p class="sum-value" style="color: var(--verde-acento)">{{ mejorLote }}</p>
       </div>
     </div>
@@ -60,6 +60,7 @@
               <th>Paltas</th>
               <th>Sanas</th>
               <th>Rechazadas</th>
+              <th>No palta</th>
               <th>% Rechazo</th>
               <th>T° Prom</th>
               <th>HR Prom</th>
@@ -80,6 +81,7 @@
               <td>{{ lote.total }}</td>
               <td style="color: var(--verde-acento)">{{ lote.sanas }}</td>
               <td style="color: var(--rojo-rechazo)">{{ lote.rechazadas }}</td>
+              <td class="col-gray">{{ lote.no_palta ?? 0 }}</td>
               <td>
                 <span class="badge-pill" :class="badgeRechazo(tasaRechazo(lote)).clase">
                   {{ tasaRechazo(lote) }}%
@@ -93,7 +95,7 @@
               </td>
             </tr>
             <tr v-if="!lotesFiltrados.length">
-              <td colspan="10" class="empty-state">No hay lotes que coincidan con los filtros</td>
+              <td colspan="11" class="empty-state">No hay lotes que coincidan con los filtros</td>
             </tr>
           </tbody>
         </table>
@@ -133,6 +135,10 @@
             <div class="detail-item">
               <p class="detail-label">Rechazadas</p>
               <p class="detail-value" style="color: var(--rojo-rechazo)">{{ loteSeleccionado.rechazadas }}</p>
+            </div>
+            <div class="detail-item">
+              <p class="detail-label">No palta</p>
+              <p class="detail-value">{{ loteSeleccionado.no_palta ?? 0 }}</p>
             </div>
           </div>
           <button class="btn btn--green" @click="exportarCSVLote(loteSeleccionado)">
@@ -220,7 +226,7 @@ function abrirDetalle(lote) {
 }
 
 function exportarCSVLote(lote) {
-  const headers = ['Código', 'Inicio', 'Fin', 'Total', 'Sanas', 'Rechazadas', '% Rechazo', 'Temp Prom', 'HR Prom', 'Confianza']
+  const headers = ['Código', 'Inicio', 'Fin', 'Total', 'Sanas', 'Rechazadas', 'No palta', '% Rechazo', 'Temp Prom', 'HR Prom', 'Confianza']
   const row = [
     lote.codigo,
     lote.inicio || '',
@@ -228,6 +234,7 @@ function exportarCSVLote(lote) {
     lote.total,
     lote.sanas,
     lote.rechazadas,
+    lote.no_palta ?? 0,
     tasaRechazo(lote) + '%',
     lote.temp_promedio?.toFixed(1) || '',
     lote.humedad_promedio || '',
@@ -246,15 +253,15 @@ function exportarCSVLote(lote) {
 
 <style scoped>
 .historial-root {
-  padding: 24px;
+  padding: 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .page-header h1 {
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: 1.45rem;
+  font-weight: 800;
   color: var(--texto-primary);
 }
 
@@ -268,11 +275,11 @@ function exportarCSVLote(lote) {
 .card {
   background: var(--fondo-cards);
   border: 1px solid var(--borde-cards);
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
 }
 
-.filter-card { padding: 16px 20px; }
+.filter-card { padding: 14px 18px; }
 
 .filter-row {
   display: flex;
@@ -300,9 +307,15 @@ function exportarCSVLote(lote) {
   padding: 8px 12px 8px 32px;
   border: 1px solid var(--borde-cards);
   border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--texto-primary);
   font-size: 0.88rem;
   outline: none;
   transition: border-color 0.15s;
+}
+
+.search-wrap input::placeholder {
+  color: var(--texto-secondary);
 }
 
 .search-wrap input:focus { border-color: var(--verde-acento); }
@@ -318,6 +331,7 @@ function exportarCSVLote(lote) {
   border: 1px solid var(--borde-cards);
   border-radius: 8px;
   font-size: 0.85rem;
+  background: var(--input-bg);
   color: var(--texto-primary);
   outline: none;
 }
@@ -330,7 +344,7 @@ function exportarCSVLote(lote) {
   border-radius: 8px;
   font-size: 0.85rem;
   color: var(--texto-primary);
-  background: #fff;
+  background: var(--input-bg);
   outline: none;
   cursor: pointer;
 }
@@ -339,22 +353,26 @@ function exportarCSVLote(lote) {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 12px;
 }
 
 .summary-card {
-  padding: 20px 24px;
+  padding: 14px 20px;
 }
 
 .sum-label {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  font-weight: 800;
   color: var(--texto-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: .02em;
 }
 
 .sum-value {
-  font-size: 2rem;
-  font-weight: 600;
+  font-size: 2.35rem;
+  font-weight: 900;
+  line-height: 1;
   color: var(--texto-primary);
 }
 
@@ -387,23 +405,25 @@ function exportarCSVLote(lote) {
 }
 
 .lotes-table th {
-  padding: 12px 16px;
+  padding: 10px 14px;
   text-align: left;
   color: var(--texto-secondary);
-  font-weight: 500;
+  font-weight: 800;
   border-bottom: 1px solid var(--borde-cards);
   white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: .02em;
 }
 
 .lotes-table td {
-  padding: 14px 16px;
+  padding: 11px 14px;
   border-bottom: 1px solid var(--borde-cards);
   color: var(--texto-primary);
   white-space: nowrap;
 }
 
-.row--par    { background: #fff; }
-.row--impar  { background: #fcfcfc; }
+.row--par    { background: var(--fondo-cards); }
+.row--impar  { background: var(--fondo-soft); }
 
 .row--clickable {
   cursor: pointer;
@@ -423,11 +443,11 @@ function exportarCSVLote(lote) {
 /* Badges */
 .badge-pill {
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 20px;
+  padding: 3px 8px;
+  border-radius: 6px;
   font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 .badge-pill--verde    { background: rgba(92,184,92,0.12);  color: var(--verde-acento); }
@@ -438,6 +458,7 @@ function exportarCSVLote(lote) {
   background: none;
   border: none;
   cursor: pointer;
+  color: var(--texto-primary);
   font-size: 1rem;
   padding: 4px 8px;
   border-radius: 6px;
@@ -467,7 +488,7 @@ function exportarCSVLote(lote) {
   width: 400px;
   max-width: 95vw;
   height: 100%;
-  background: #fff;
+  background: var(--fondo-cards);
   display: flex;
   flex-direction: column;
   animation: slideIn 0.22s ease;
@@ -482,7 +503,7 @@ function exportarCSVLote(lote) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--borde-cards);
 }
 
@@ -501,10 +522,10 @@ function exportarCSVLote(lote) {
 .drawer-body {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .drawer-section-title {
@@ -517,13 +538,14 @@ function exportarCSVLote(lote) {
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .detail-item {
   background: var(--fondo-pagina);
+  border: 1px solid var(--borde-cards);
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 
 .detail-label {
@@ -533,8 +555,8 @@ function exportarCSVLote(lote) {
 }
 
 .detail-value {
-  font-size: 1.2rem;
-  font-weight: 600;
+  font-size: 1.35rem;
+  font-weight: 900;
   color: var(--texto-primary);
 }
 

@@ -115,6 +115,7 @@ SELECT
     COUNT(DISTINCT p.id)                        AS total,
     COUNT(DISTINCT p.id) FILTER (WHERE p.clasificacion = 'sana')                       AS sanas,
     COUNT(DISTINCT p.id) FILTER (WHERE p.clasificacion IN ('antracnosis','scab'))      AS rechazadas,
+    COUNT(DISTINCT p.id) FILTER (WHERE p.clasificacion = 'no_es_palta')                AS no_palta,
     ROUND(
         CASE
             WHEN COUNT(DISTINCT p.id) = 0 THEN 0
